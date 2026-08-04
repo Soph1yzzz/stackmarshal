@@ -298,6 +298,8 @@ def test_installer_bootstraps_require_git_and_verify_release_installer() -> None
         assert "SHA256SUMS" in text
         assert "allow-downgrade" in text.lower().replace("_", "-")
     assert "winget" in powershell
+    assert "Get-FileHash" not in powershell
+    assert "Security.Cryptography.SHA256" in powershell
     assert "/dev/tty" in shell
     assert "apt-get" in shell and "brew" in shell
     assert "hmac.compare_digest" in shell

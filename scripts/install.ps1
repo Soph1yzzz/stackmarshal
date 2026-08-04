@@ -244,6 +244,20 @@ function Invoke-Download {
     }
 }
 
+function Get-Sha256Hex {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    try {
+        $stream = [IO.File]::OpenRead($Path)
+        $hash = $algorithm.ComputeHash($stream)
+        return ([BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
+    } finally {
+        if ($stream) { $stream.Dispose() }
+        $algorithm.Dispose()
+    }
+}
+
 function Get-ExpectedHash {
     param(
         [Parameter(Mandatory = $true)][string]$ChecksumFile,
@@ -283,7 +297,7 @@ try {
     Invoke-Download -Url "$releaseBase/SHA256SUMS" -Destination $checksums
     Invoke-Download -Url "$releaseBase/installer.py" -Destination $installer
     $expected = Get-ExpectedHash -ChecksumFile $checksums -Name "installer.py"
-    $actual = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+    $actual = Get-Sha256Hex -Path $installer
     if ($actual -ne $expected) { throw "Checksum mismatch for installer.py" }
 
     $arguments = @(
