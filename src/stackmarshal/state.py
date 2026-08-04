@@ -13,6 +13,9 @@ from .config import Config
 from .constants import Mode, Phase, SCHEMA_VERSION, Status
 from .models import BudgetState, Invocation, ProjectInfo, RunState
 
+RUN_ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
+
+
 _ALLOWED_TRANSITIONS: dict[Phase, set[Phase]] = {
     Phase.INVOCATION_CHECK: {Phase.INTENT_NORMALIZATION, Phase.STOPPED},
     Phase.INTENT_NORMALIZATION: {Phase.ENVIRONMENT_AUDIT, Phase.STOPPED},
@@ -52,14 +55,32 @@ def project_info(root: Path) -> ProjectInfo:
     resolved = root.resolve()
     head = _run_git(resolved, "rev-parse", "HEAD")
     status = _run_git(resolved, "status", "--porcelain")
-    identity_seed = str(resolved)
+    top_level = _run_git(resolved, "rev-parse", "--show-toplevel")
+    roots = _run_git(resolved, "rev-list", "--max-parents=0", "HEAD")
+    remote = _run_git(resolved, "config", "--get", "remote.origin.url")
+    identity_seed = json.dumps(
+        {
+            "root": str(resolved),
+            "git_toplevel": str(Path(top_level).resolve()) if top_level else None,
+            "root_commits": sorted(roots.splitlines()) if roots else [],
+            "remote_origin": remote or None,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     identity = hashlib.sha256(identity_seed.encode()).hexdigest()
     return ProjectInfo(str(resolved), head, identity, bool(status))
 
 
+def validate_run_id(run_id: str) -> str:
+    if not RUN_ID_RE.fullmatch(run_id):
+        raise ValueError(f"Invalid StackMarshal run id: {run_id!r}")
+    return run_id
+
+
 def new_run_id() -> str:
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    return f"{stamp}-{uuid.uuid4().hex[:8]}"
+    return validate_run_id(f"{stamp}-{uuid.uuid4().hex[:8]}")
 
 
 def create_run(root: Path, invocation: str, mode: Mode, config: Config) -> RunState:
@@ -112,6 +133,7 @@ def load_state(path: Path) -> RunState:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if raw.get("schema_version") != SCHEMA_VERSION:
         raise ValueError(f"Unsupported schema_version: {raw.get('schema_version')}")
+    validate_run_id(str(raw.get("run_id", "")))
     return RunState.from_dict(raw)
 
 

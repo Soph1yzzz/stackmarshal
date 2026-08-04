@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 from typing import Any
@@ -42,12 +43,22 @@ def inspect_candidate(candidate: dict[str, Any], manifest_text: str = "") -> dic
 
 
 def install_project_file(
-    *, candidate_id: str, source_file: Path, target_root: Path, relative_target: Path,
-    source: str, version: str | None, commit: str | None,
+    *,
+    candidate_id: str,
+    source_file: Path,
+    target_root: Path,
+    relative_target: Path,
+    source: str,
+    version: str | None,
+    commit: str | None,
 ) -> AcquisitionReceipt:
     target = ensure_within_workspace(target_root, target_root / relative_target)
-    if target.exists():
+    if target == target_root.resolve():
+        raise ValueError("Acquisition target cannot be the workspace root")
+    if target.exists() or target.is_symlink():
         raise FileExistsError(f"Refusing to overwrite existing file: {target}")
+    if source_file.is_symlink() or not source_file.is_file():
+        raise ValueError(f"Acquisition source must be a regular non-symlink file: {source_file}")
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source_file, target)
     digest = hashlib.sha256(target.read_bytes()).hexdigest()
@@ -64,15 +75,35 @@ def install_project_file(
     )
 
 
+def _recorded_path(target_root: Path, value: str) -> Path:
+    root = target_root.resolve()
+    raw = Path(value).expanduser()
+    if not raw.is_absolute():
+        raw = root / raw
+    # Normalize `..` without following the final path if it is a symlink.
+    candidate = Path(os.path.abspath(raw))
+    if candidate == root:
+        raise ValueError("Rollback may not target the workspace root")
+    parent = candidate.parent.resolve()
+    if parent != root and root not in parent.parents:
+        raise ValueError(f"Workspace escape rejected: {value}")
+    return candidate
+
+
 def rollback(receipt: AcquisitionReceipt, target_root: Path) -> None:
+    created = {_recorded_path(target_root, value) for value in receipt.files_created}
     for value in reversed(receipt.rollback):
-        path = ensure_within_workspace(target_root, Path(value))
-        if path.is_file() or path.is_symlink():
+        path = _recorded_path(target_root, value)
+        if path not in created:
+            raise ValueError(f"Rollback entry was not created by this receipt: {value}")
+        if path.is_symlink() or path.is_file():
             path.unlink()
-        elif path.is_dir():
-            shutil.rmtree(path)
+        elif path.exists():
+            raise ValueError(f"Rollback refuses recursive directory deletion: {path}")
 
 
 def save_receipt(receipt: AcquisitionReceipt, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(receipt.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(receipt.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )

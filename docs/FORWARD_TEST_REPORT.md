@@ -10,8 +10,8 @@ Date: 2026-08-04
 - Full CLI lifecycle: init, start, audit, transitions, budget, score, fingerprint, progress,
   lock, checkpoint, resume, validation, formal stop, and report.
 - Budget exhaustion, invalid transition, repeated-state protection, unsafe lock, malformed JSON,
-  workspace escape, install hooks, secret redaction, and rollback.
-- Git HEAD, dirty-state, project-identity, checkpoint-integrity, and future-schema rejection.
+  strict run IDs, workspace escape, install hooks, secret redaction, and receipt-bound rollback.
+- Git HEAD, dirty-state, repository-lineage identity, HMAC checkpoint integrity, and future-schema rejection.
 - Direct Skill fallback execution without runtime package dependencies.
 - Installed CLI wrapper execution with an explicit external `--root`.
 - JSON Schema meta-validation and runtime example validation.
@@ -27,8 +27,11 @@ the final release checklist after repository publication.
 The suite covers malicious install hooks, download-to-shell patterns, PowerShell dynamic
 execution, secret-access commands, public/network/global/privileged writes, unpinned and
 unlicensed candidates, artifact hash mismatch, workspace traversal, checkpoint tampering,
+release symlink exfiltration, command-classification bypasses, forged rollback receipts,
 and external text that does not satisfy the explicit invocation gate.
 
 ## Result
 
-34 tests passed with 98% branch-aware coverage before the final Codex Security scan.
+40 tests were collected after Codex Security remediation. Windows ran 39 passes with the
+POSIX-symlink case skipped by operating-system privilege; the identical symlink rejection path
+was executed successfully under WSL/Linux. Branch-aware coverage is 95%.

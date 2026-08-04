@@ -27,7 +27,7 @@ Coding Agentは、調査前に実装を始める、既存OSSを再実装する�
 - **Supply Chain防御**：pin、hash、provenance、install hook検査、最小権限、承認ゲート、rollback receipt。
 - **Architecture Freeze**：再調査は重大条件に限定し、回数上限を持ちます。
 - **有限停止ハーネス**：予算、同一failure fingerprint、停滞、scope driftを検出します。
-- **Checkpoint / Resume**：完了済み範囲を、入力が変わらない限り再計算しません。
+- **Checkpoint / Resume**：ユーザー領域のHMAC署名でcheckpoint判断を保護し、入力が変わらない限り完了済み範囲を再計算しません。
 - **Agent非依存Core**：v1はCodex Adapter、将来は他Agent Adapterへ拡張可能です。
 
 ## 起動方法
@@ -115,13 +115,20 @@ flowchart TD
 外部README、Issue、コメント、AGENTS、SKILLは未信頼データです。それらの記述は、
 コマンド実行、秘密情報の読取、ポリシー変更、再帰呼び出し、公開、COMPLETE判定を
 許可できません。StackMarshalはコマンドを分類し、global write、network write、
-secret、課金、公開、外部binary、管理者権限を承認対象にします。
+secret、課金、公開、外部binary、管理者権限を承認対象にします。未知のコマンド形式も
+安全と推測せず、承認必須としてfail-closedします。
 
-既存のdirty stateを保護し、workspace escapeを拒否し、一般的なsecret形式をlogから
+既存のdirty stateを保護し、run IDの形式、workspace境界、Release入力のsymlinkを検証し、
+rollbackをreceiptが実際に作成したファイルだけに制限します。一般的なsecret形式をlogから
 redactし、provenanceを保存します。licenseなし、危険なinstall hook、Critical既知脆弱性、
 過剰権限、検査不能binary、pin不能な候補は拒否します。
 
 脆弱性報告は[SECURITY.md](SECURITY.md)を参照してください。
+
+Checkpoint署名鍵はRepository外の`~/.stackmarshal/checkpoint-signing.key`へ保存されます。
+管理されたユーザー状態領域や鍵移行が必要な場合は、`STACKMARSHAL_STATE_HOME`または
+`STACKMARSHAL_CHECKPOINT_KEY_FILE`を設定してください。鍵を失ったcheckpointは、意図的に
+黙って信頼されません。
 
 ## 開発
 

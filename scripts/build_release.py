@@ -60,6 +60,23 @@ def normalized_time(epoch: int) -> datetime:
     return datetime.fromtimestamp(epoch, UTC).replace(microsecond=0)
 
 
+def safe_regular_file(root: Path, path: Path) -> Path:
+    """Return a contained regular file without following repository symlinks."""
+    resolved_root = root.resolve(strict=True)
+    relative = path.relative_to(root)
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError(f"Release input may not be a symlink: {relative.as_posix()}")
+    resolved = path.resolve(strict=True)
+    if resolved != resolved_root and resolved_root not in resolved.parents:
+        raise ValueError(f"Release input escapes its root: {relative.as_posix()}")
+    if not resolved.is_file():
+        raise ValueError(f"Release input is not a regular file: {relative.as_posix()}")
+    return resolved
+
+
 def zip_tree(source: Path, destination: Path, prefix: str, epoch: int) -> None:
     # ZIP timestamps cannot predate 1980-01-01.
     zip_time = normalized_time(max(epoch, 315532800)).timetuple()[:6]
@@ -70,12 +87,18 @@ def zip_tree(source: Path, destination: Path, prefix: str, epoch: int) -> None:
             relative_source = path.relative_to(source)
             if "__pycache__" in relative_source.parts or path.suffix in {".pyc", ".pyo"}:
                 continue
+            safe_path = safe_regular_file(source, path)
             relative = (Path(prefix) / relative_source).as_posix()
             info = zipfile.ZipInfo(relative, date_time=zip_time)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.create_system = 3
             info.external_attr = 0o100644 << 16
-            archive.writestr(info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+            archive.writestr(
+                info,
+                safe_path.read_bytes(),
+                compress_type=zipfile.ZIP_DEFLATED,
+                compresslevel=9,
+            )
 
 
 def tracked_files() -> list[Path]:
@@ -85,13 +108,16 @@ def tracked_files() -> list[Path]:
     return [Path(item.decode("utf-8")) for item in output.split(b"\0") if item]
 
 
+def validate_tracked_files() -> None:
+    for relative in tracked_files():
+        safe_regular_file(ROOT, ROOT / relative)
+
+
 def source_archive(destination: Path, version: str, epoch: int) -> None:
     tar_buffer = io.BytesIO()
     with tarfile.open(fileobj=tar_buffer, mode="w", format=tarfile.PAX_FORMAT) as archive:
         for relative in tracked_files():
-            path = ROOT / relative
-            if not path.is_file():
-                continue
+            path = safe_regular_file(ROOT, ROOT / relative)
             archive_name = (Path(f"stackmarshal-{version}") / relative).as_posix()
             info = archive.gettarinfo(str(path), arcname=archive_name)
             info.uid = 0
@@ -157,6 +183,7 @@ def main() -> int:
     if not args.allow_dirty and git("status", "--porcelain"):
         raise SystemExit("Refusing to build a release from a dirty Git worktree")
 
+    validate_tracked_files()
     epoch = resolve_epoch(args.source_date_epoch)
     created_at = normalized_time(epoch).isoformat()
     git_head = git("rev-parse", "HEAD")

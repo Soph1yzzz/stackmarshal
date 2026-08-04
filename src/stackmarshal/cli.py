@@ -28,6 +28,7 @@ from .state import (
     stop,
     transition,
     validate_invocation,
+    validate_run_id,
 )
 from .validation import validate_json_file
 
@@ -58,7 +59,8 @@ def _paths(root: Path, run_id: str | None = None) -> dict[str, Path]:
         "runs": base / "runs",
     }
     if run_id:
-        result["run"] = result["runs"] / run_id
+        validated_run_id = validate_run_id(run_id)
+        result["run"] = result["runs"] / validated_run_id
         result["state"] = result["run"] / "run.json"
         result["events"] = result["run"] / "events.jsonl"
     return result
@@ -105,7 +107,7 @@ def cmd_start(args: argparse.Namespace) -> int:
 def _find_state(root: Path, run_id: str | None) -> tuple[Path, Any]:
     runs = _paths(root)["runs"]
     if run_id:
-        path = runs / run_id / "run.json"
+        path = runs / validate_run_id(run_id) / "run.json"
     else:
         candidates = sorted(runs.glob("*/run.json"), key=lambda item: item.stat().st_mtime, reverse=True)
         if not candidates:

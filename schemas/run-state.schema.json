@@ -6,7 +6,7 @@
   "required": ["schema_version", "run_id", "project", "invocation", "mode", "phase", "status", "budget", "progress"],
   "properties": {
     "schema_version": {"const": "1.0"},
-    "run_id": {"type": "string", "minLength": 8},
+    "run_id": {"type": "string", "pattern": "^\\d{8}-\\d{6}-[a-f0-9]{8}$"},
     "project": {
       "type": "object",
       "required": ["root", "dirty"],

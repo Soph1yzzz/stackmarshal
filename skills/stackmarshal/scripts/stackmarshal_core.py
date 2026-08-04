@@ -11,9 +11,12 @@ from __future__ import annotations
 import argparse
 from datetime import UTC, datetime
 import hashlib
+import hmac
 import json
+import os
 from pathlib import Path
 import re
+import secrets
 import sys
 from typing import Any
 
@@ -122,14 +125,54 @@ def progress(data: dict[str, Any]) -> dict[str, Any]:
     return {"improved": improved}
 
 
+def checkpoint_key_path() -> Path:
+    configured = os.environ.get("STACKMARSHAL_CHECKPOINT_KEY_FILE")
+    if configured:
+        return Path(configured).expanduser()
+    state_home = Path(os.environ.get("STACKMARSHAL_STATE_HOME", Path.home() / ".stackmarshal"))
+    return state_home.expanduser() / "checkpoint-signing.key"
+
+
+def load_or_create_checkpoint_key() -> bytes:
+    path = checkpoint_key_path()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not path.exists():
+        key = secrets.token_bytes(32)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_BINARY"):
+            flags |= os.O_BINARY
+        try:
+            descriptor = os.open(path, flags, 0o600)
+        except FileExistsError:
+            pass
+        else:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(key)
+    if not path.is_file() or path.is_symlink():
+        raise ValueError(f"Checkpoint signing key is missing or unsafe: {path}")
+    key = path.read_bytes()
+    if len(key) != 32:
+        raise ValueError(f"Checkpoint signing key has invalid length: {path}")
+    return key
+
+
 def checkpoint(data: dict[str, Any], output: Path) -> dict[str, Any]:
     required = ("run_id", "project_identity", "status", "current_phase", "next_action")
     missing = [key for key in required if key not in data]
     if missing:
         raise ValueError(f"Missing checkpoint fields: {missing}")
-    payload = {"schema_version": "1.0", "timestamp": datetime.now(UTC).isoformat(), **data}
+    key = load_or_create_checkpoint_key()
+    payload = {
+        "schema_version": "1.0",
+        "timestamp": datetime.now(UTC).isoformat(),
+        **data,
+        "integrity_algorithm": "hmac-sha256-v1",
+        "integrity_key_id": hashlib.sha256(key).hexdigest()[:16],
+    }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    payload["integrity_sha256"] = hashlib.sha256(canonical.encode()).hexdigest()
+    payload["integrity_hmac_sha256"] = hmac.new(
+        key, canonical.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return {"checkpoint": str(output)}

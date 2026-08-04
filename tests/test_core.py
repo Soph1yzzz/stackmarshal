@@ -174,5 +174,5 @@ def test_checkpoint_integrity_and_project_identity(tmp_path: Path) -> None:
     data = json.loads(json_path.read_text(encoding="utf-8"))
     data["next_action"] = "tampered"
     json_path.write_text(json.dumps(data), encoding="utf-8")
-    with pytest.raises(ValueError, match="integrity"):
+    with pytest.raises(ValueError, match="signature"):
         inspect_checkpoint(json_path, tmp_path)

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .constants import Mode, Phase, SCHEMA_VERSION, Status
+from .state import RUN_ID_RE
 
 
 def validate_run_state(data: dict[str, Any]) -> list[str]:
@@ -14,6 +15,8 @@ def validate_run_state(data: dict[str, Any]) -> list[str]:
         errors.append(f"missing:{key}")
     if data.get("schema_version") != SCHEMA_VERSION:
         errors.append("unsupported_schema_version")
+    if not RUN_ID_RE.fullmatch(str(data.get("run_id", ""))):
+        errors.append("invalid_run_id")
     try:
         Mode(str(data.get("mode")))
     except ValueError:
@@ -67,8 +70,20 @@ def validate_json_file(path: Path, kind: str) -> dict[str, Any]:
     elif kind == "capability-map":
         errors = [] if data.get("schema_version") == "1.0" and isinstance(data.get("capabilities"), list) else ["invalid_capability_map"]
     elif kind == "checkpoint":
-        required = {"schema_version", "run_id", "project_identity", "status", "current_phase", "next_action"}
+        required = {
+            "schema_version",
+            "run_id",
+            "project_identity",
+            "status",
+            "current_phase",
+            "next_action",
+            "integrity_algorithm",
+            "integrity_key_id",
+            "integrity_hmac_sha256",
+        }
         errors = [f"missing:{key}" for key in sorted(required - set(data))]
+        if data.get("integrity_algorithm") not in (None, "hmac-sha256-v1"):
+            errors.append("unsupported_checkpoint_integrity")
     else:
         errors = [f"unknown_kind:{kind}"]
     return {"valid": not errors, "errors": errors}

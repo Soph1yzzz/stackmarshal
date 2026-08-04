@@ -71,7 +71,7 @@ def test_all_security_command_classes_and_manifest_findings() -> None:
         (["cat", ".ssh/id_rsa"], CommandClass.SECRET_ACCESS, True),
         (["gh", "release", "create", "v1"], CommandClass.PUBLICATION, True),
         (["sudo", "apt", "install", "x"], CommandClass.PRIVILEGED, True),
-        (["rm", "-rf", "build"], CommandClass.PROJECT_WRITE, False),
+        (["rm", "-rf", "build"], CommandClass.PROJECT_WRITE, True),
     ]
     for argv, expected, approval in cases:
         decision = classify_command(argv)
@@ -243,10 +243,19 @@ def test_acquisition_receipt_save_overwrite_and_directory_rollback(tmp_path: Pat
     directory = root / "remove-me"
     directory.mkdir()
     dir_receipt = AcquisitionReceipt(
-        "d", "file://x", "1", None, None, str(directory), (), (str(directory),), "now"
+        "d",
+        "file://x",
+        "1",
+        None,
+        None,
+        str(directory),
+        (str(directory),),
+        (str(directory),),
+        "now",
     )
-    rollback(dir_receipt, root)
-    assert not directory.exists()
+    with pytest.raises(ValueError, match="recursive directory"):
+        rollback(dir_receipt, root)
+    assert directory.exists()
     rollback(receipt, root)
 
 

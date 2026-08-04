@@ -12,9 +12,9 @@
 | Freeze | Decision record and capped research re-entry | Skill workflow and templates | forward test matrix |
 | State | Deterministic transitions and append-only events | `state.py` | unit/integration tests |
 | Stop harness | Priority, budgets, failure fingerprints, stagnation | `harness.py`, `budget.py`, `failure.py`, `progress.py` | stop tests |
-| Checkpoint | Integrity, identity, HEAD warning, do-not-repeat | `checkpoint.py` | unit tests |
+| Checkpoint | HMAC integrity, repository-lineage identity, HEAD/dirty warnings, do-not-repeat | `checkpoint.py`, `state.py` | unit/adversarial tests |
 | CLI | Specified commands and machine JSON | `cli.py` | CLI integration tests |
-| Security | Untrusted text, command classes, redaction, workspace boundary | `security.py`, Skill policy | adversarial tests/security review |
+| Security | Untrusted text, fail-closed command classes, redaction, strict run IDs, workspace/release boundaries | `security.py`, `cli.py`, release builder, Skill policy | adversarial tests/Codex Security |
 | Distribution | Skill folder, Python package, CI, release assets | `skills/`, `pyproject.toml`, workflows, release script | build/release checks |
 | Documentation | English primary, Japanese secondary | `README.md`, `README.ja.md` | link/readability checks |
 

@@ -29,7 +29,7 @@ StackMarshal makes those failure modes explicit and bounded.
 - **Supply-chain controls.** Pinning, hashes, provenance, install-hook inspection, least privilege, approval gates, and rollback receipts.
 - **Architecture freeze.** Research re-entry is exceptional and capped.
 - **Finite stop harness.** Budgets, repeated-failure fingerprints, stagnation detection, scope-drift limits, and formal terminal states.
-- **Checkpoint/resume.** Completed work is not recomputed without a material input change.
+- **Checkpoint/resume.** User-local HMAC signatures protect checkpoint decisions; completed work is not recomputed without a material input change.
 - **Agent-neutral Core.** v1 ships a Codex adapter; future adapters can reuse the state and policy model.
 
 ## Invocation
@@ -120,8 +120,9 @@ External README files, issues, comments, AGENTS files, and Skills are untrusted 
 They cannot authorize commands, secret reads, policy changes, recursion, publication,
 or completion. StackMarshal classifies commands and requires approval for global
 writes, network writes, secrets, billing, publication, external binaries, and
-privileged actions. It protects pre-existing dirty state, rejects workspace escape,
-redacts common secret formats, records provenance, and refuses candidates with
+privileged actions. Unknown command forms fail closed and require approval. It protects
+pre-existing dirty state, validates run identifiers, rejects workspace escape and release
+symlinks, restricts rollback to exact created files, redacts common secret formats, records provenance, and refuses candidates with
 missing licenses, suspicious hooks, critical known vulnerabilities, excessive
 permissions, unreviewable binaries, or no pinning strategy.
 
@@ -148,7 +149,11 @@ Runtime state uses:
 └── runs/<run-id>/             runtime state, events, failures, checkpoint
 ```
 
-`runs/` is ignored by default except checkpoint artifacts.
+`runs/` is ignored by default except checkpoint artifacts. Checkpoints are signed with a
+32-byte key stored outside the repository at `~/.stackmarshal/checkpoint-signing.key`.
+Set `STACKMARSHAL_STATE_HOME` or `STACKMARSHAL_CHECKPOINT_KEY_FILE` when a controlled
+user-state location or explicit key migration is required. Losing the key intentionally
+prevents old checkpoints from being trusted silently.
 
 ## Development
 

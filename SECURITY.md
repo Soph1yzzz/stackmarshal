@@ -28,11 +28,13 @@ not a paid support SLA.
 
 StackMarshal treats external repository and registry content as untrusted data. A
 report is especially relevant when code can bypass explicit invocation, escape the
-workspace, reduce immutable budgets, forge checkpoint integrity, expose secrets,
-execute candidate instructions, bypass an approval class, accept an unpinned or
-hash-mismatched artifact, recurse into uncontrolled capability acquisition, or mark
+workspace, traverse a run identifier, reduce immutable budgets, forge an HMAC-signed
+checkpoint, expose secrets through release inputs, execute candidate instructions,
+bypass a fail-closed approval class, expand rollback beyond receipt-created files,
+accept an unpinned or hash-mismatched artifact, recurse into uncontrolled capability acquisition, or mark
 mandatory criteria complete without evidence.
 
-StackMarshal is not a sandbox. The host Codex environment and operator remain
-responsible for OS-level isolation, credentials, network controls, and reviewing
-publication or privileged actions.
+StackMarshal is not a sandbox. The user-local checkpoint signing key protects against
+repository-local tampering, not malware already executing as the same OS user. The host
+Codex environment and operator remain responsible for OS-level isolation, credentials,
+network controls, and reviewing publication or privileged actions.
