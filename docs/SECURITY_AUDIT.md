@@ -46,6 +46,15 @@ CodeQL runs. Their authoritative scan ID, commit, run IDs, and asset verificatio
 in the published GitHub v1.0.0 release notes so this repository does not require a post-scan
 metadata commit.
 
+## v1.1 installer review scope
+
+The v1.1 release adds a separate installation/update boundary. Its final release scan covers the
+PowerShell and Bash bootstraps, strict Release checksum verification, dedicated venv creation,
+safe Skill archive extraction, atomic CLI/Skill replacement, rollback, modified-Skill backup,
+version synchronization, guarded prerequisite/PATH/downgrade actions, CI smoke tests, and the
+fresh-install audit. The authoritative final scan ID and immutable commit are recorded in the
+published v1.1.0 GitHub Release body.
+
 ## Scope limitation
 
 The application threat model excludes kernel compromise and malware already executing as the

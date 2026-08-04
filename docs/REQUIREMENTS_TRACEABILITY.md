@@ -14,8 +14,9 @@
 | Stop harness | Priority, budgets, failure fingerprints, stagnation | `harness.py`, `budget.py`, `failure.py`, `progress.py` | stop tests |
 | Checkpoint | HMAC integrity, repository-lineage identity, exact worktree fingerprint, strict HEAD/dirty validation, do-not-repeat | `checkpoint.py`, `integrity.py`, `state.py` | unit/adversarial tests |
 | CLI | Specified commands and machine JSON | `cli.py` | CLI integration tests |
-| Security | Untrusted text, fail-closed command classes, redaction, strict run IDs, workspace/release boundaries | `security.py`, `cli.py`, release builder, Skill policy | adversarial tests/Codex Security |
-| Distribution | Skill folder, Python package, CI, release assets | `skills/`, `pyproject.toml`, workflows, release script | build/release checks |
+| Security | Untrusted text, fail-closed command classes, redaction, strict run IDs, workspace/release/installer boundaries | `security.py`, `cli.py`, release builder, verified installer, Skill policy | adversarial tests/Codex Security |
+| Installation | One-command install/update/repair, prerequisite approval, version pinning, checksum verification, isolated venv, atomic rollback, Skill backup, PATH consent | `scripts/install.ps1`, `scripts/install.sh`, `scripts/installer.py` | `tests/test_installer.py`, cross-platform installer smoke, `docs/INSTALLATION_AUDIT.md` |
+| Distribution | Skill folder, Python package, CI, bootstrap/installer assets, release assets | `skills/`, `pyproject.toml`, workflows, release scripts | build/release checks |
 | Documentation | English primary, Japanese secondary | `README.md`, `README.ja.md` | link/readability checks |
 
 `COMPLETE` is permitted only when every mandatory row has passing evidence and the

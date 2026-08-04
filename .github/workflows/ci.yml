@@ -36,5 +36,11 @@ jobs:
       - run: coverage report --fail-under=85
       - run: python -m build
       - run: python -m twine check dist/*
+      - name: Build verified installer release assets
+        if: matrix.python-version == '3.11'
+        run: python scripts/build_release.py 1.1.0
+      - name: Smoke test one-command installer
+        if: matrix.python-version == '3.11'
+        run: python scripts/smoke_installer.py
       - run: stackmarshal invocation "Use StackMarshal to build this"
       - run: python skills/stackmarshal/scripts/stackmarshal_core.py invocation "StackMarshalを使って実装して"

@@ -52,23 +52,49 @@ Compare StackMarshal with another project.
 Fix the word "StackMarshal" in this README.
 ```
 
-## Install the Codex Skill
+## Install or update
 
-Use Codex's built-in Skill installer with the GitHub directory URL:
+The recommended installer puts the CLI in a dedicated virtual environment and installs the
+matching Codex Skill. It verifies the versioned Release assets against `SHA256SUMS`, runs a
+post-install doctor check, and removes its temporary files.
 
-```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/main/skills/stackmarshal
+**Windows PowerShell:**
+
+```powershell
+irm https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.ps1 | iex
 ```
 
-Restart Codex after installation. The Skill includes a dependency-free fallback for
-its critical deterministic checks. For the complete CLI, install the Python package:
+**macOS / Linux:**
 
 ```bash
-python -m pip install "git+https://github.com/Soph1yzzz/stackmarshal.git@v1.0.0"
-stackmarshal --version
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.sh | bash
 ```
 
-Python 3.11 or newer is required. Runtime dependencies: **zero**.
+Run the same command again to update to the latest stable release or repair the installed
+version. Pin a reproducible version when required:
+
+```powershell
+& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.0/install.ps1))) -Version v1.1.0
+```
+
+```bash
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.0/install.sh | bash -s -- --version v1.1.0
+```
+
+Git and Python 3.11 or newer are prerequisites. When either is missing, the bootstrap explains
+what it found and asks before using the operating-system package manager. It also asks before
+changing the user `PATH` or replacing a modified/unmanaged StackMarshal Skill. Use `-Yes` on
+PowerShell or `--yes` on Bash only for a deliberately non-interactive installation. Downgrades
+remain blocked unless `-AllowDowngrade` / `--allow-downgrade` is supplied explicitly.
+
+The CLI has **zero required runtime dependencies**. It is not installed into the active/global
+Python environment. Restart Codex after installing or updating the Skill.
+
+For a Skill-only manual installation, use the matching release tag:
+
+```text
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.0/skills/stackmarshal
+```
 
 ## Quick CLI tour
 
@@ -176,14 +202,15 @@ behavior is a v1 release requirement.
 
 ## Release artifacts
 
-`python scripts/build_release.py 1.0.0` produces:
+`python scripts/build_release.py 1.1.0` produces:
 
-- `stackmarshal-skill-v1.0.0.zip`
+- `install.ps1`, `install.sh`, and the shared verified `installer.py`
+- `stackmarshal-skill-v1.1.0.zip`
 - Python wheel and source distribution
 - source archive
 - `SHA256SUMS`
 - CycloneDX-style SBOM JSON
-- build provenance JSON
+- build provenance and release-manifest JSON
 
 Publishing to GitHub or a package registry remains an explicit approval action.
 

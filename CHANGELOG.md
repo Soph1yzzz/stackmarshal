@@ -2,6 +2,22 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
+## [1.1.0] - 2026-08-05
+
+### Added
+
+- One-command Windows PowerShell and macOS/Linux Bash installation for the CLI and matching Codex Skill.
+- Stable-version discovery, explicit version pinning, same-version repair, update, and guarded downgrade flows.
+- Explicit approval before installing missing Git, Python, or venv support and before changing PATH or replacing a modified Skill.
+- Dedicated managed virtual environments, strict Release checksum verification, safe Skill ZIP extraction, atomic directory swaps, rollback, modified-Skill backup, and post-install doctor checks.
+- Cross-platform installer smoke tests and fresh-install audit evidence.
+
+### Changed
+
+- Release assets now include `install.ps1`, `install.sh`, and the shared `installer.py`.
+- The recommended installation path no longer writes into the active or global Python environment.
+- Skill and CLI release versions are synchronized and recorded in installer state.
+
 ## [1.0.0] - 2026-08-04
 
 ### Added

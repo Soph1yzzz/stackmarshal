@@ -50,23 +50,48 @@ StackMarshalに似たOSSを比較して。
 README内のStackMarshalという表記を直して。
 ```
 
-## Codex Skillの導入
+## 導入・更新
 
-Codex内蔵のSkill InstallerへGitHubディレクトリURLを渡します。
+推奨installerは、CLIを専用virtual environmentへ隔離導入し、同じversionのCodex Skillも
+一括で配置します。version固定されたRelease assetsを`SHA256SUMS`で検証し、導入後doctorと
+一時ファイル削除まで実行します。
 
-```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/main/skills/stackmarshal
+**Windows PowerShell：**
+
+```powershell
+irm https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.ps1 | iex
 ```
 
-導入後はCodexを再起動してください。Skill単体にも依存ゼロの決定論的フォールバックを
-同梱しています。正式CLIはPythonパッケージとして導入します。
+**macOS / Linux：**
 
 ```bash
-python -m pip install "git+https://github.com/Soph1yzzz/stackmarshal.git@v1.0.0"
-stackmarshal --version
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.sh | bash
 ```
 
-Python 3.11以上が必要です。Runtime必須依存は**ゼロ**です。
+同じcommandを再実行すると、最新stableへのupdate、または同versionのrepairになります。
+再現性のためversionを固定する場合：
+
+```powershell
+& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.0/install.ps1))) -Version v1.1.0
+```
+
+```bash
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.0/install.sh | bash -s -- --version v1.1.0
+```
+
+GitとPython 3.11以上が前提です。未導入の場合は、検出結果を説明した上でOS package managerを
+使ってよいか確認します。user `PATH`の変更、または編集済み・installer管理外のSkill置換にも
+確認が入ります。完全な非対話導入を意図する場合だけ、PowerShellは`-Yes`、Bashは`--yes`を
+使用してください。downgradeは`-AllowDowngrade` / `--allow-downgrade`を明示しない限り拒否します。
+
+CLIのRuntime必須依存は**ゼロ**で、現在のPython環境やglobal Pythonへは導入しません。
+Skill導入・更新後はCodexを再起動してください。
+
+Skillだけを手動導入する場合も、`main`ではなく対応するRelease tagへ固定します。
+
+```text
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.0/skills/stackmarshal
+```
 
 ## CLI例
 

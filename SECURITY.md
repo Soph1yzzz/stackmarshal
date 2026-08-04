@@ -31,8 +31,10 @@ report is especially relevant when code can bypass explicit invocation, escape t
 workspace, traverse a run identifier, reduce immutable budgets, forge an HMAC-signed
 checkpoint, expose secrets through release inputs, execute candidate instructions,
 bypass a fail-closed approval class, expand rollback beyond receipt-created files,
-accept an unpinned or hash-mismatched artifact, recurse into uncontrolled capability acquisition, or mark
-mandatory criteria complete without evidence.
+accept an unpinned or hash-mismatched artifact, escape installer staging or Skill extraction,
+silently install prerequisites/change PATH/overwrite modified Skills/downgrade, leave a partial
+update after failure, recurse into uncontrolled capability acquisition, or mark mandatory criteria
+complete without evidence.
 
 StackMarshal is not a sandbox. The user-local checkpoint signing key protects against
 repository-local tampering, not malware already executing as the same OS user. The host

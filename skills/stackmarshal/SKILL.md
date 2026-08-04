@@ -7,6 +7,8 @@ description: >
   such as "StackMarshalを使って実装して", "Use StackMarshal to build this",
   "使用 StackMarshal 实现", or "$stackmarshal". Do not use for ordinary coding
   requests, explanations, comparisons, or text edits that merely mention the name.
+metadata:
+  version: "1.1.0"
 ---
 
 # StackMarshal

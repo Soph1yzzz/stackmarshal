@@ -214,6 +214,9 @@ def main() -> int:
     zip_tree(ROOT / "skills" / "stackmarshal", skill_zip, "stackmarshal", epoch)
     source_tar = release / f"stackmarshal-source-v{version}.tar.gz"
     source_archive(source_tar, version, epoch)
+    for installer_name in ("installer.py", "install.ps1", "install.sh"):
+        source = safe_regular_file(ROOT, ROOT / "scripts" / installer_name)
+        shutil.copyfile(source, release / installer_name)
 
     sbom = {
         "bomFormat": "CycloneDX",
