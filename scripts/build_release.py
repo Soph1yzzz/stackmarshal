@@ -66,7 +66,10 @@ def zip_tree(source: Path, destination: Path, prefix: str, epoch: int) -> None:
         for path in sorted(source.rglob("*")):
             if not path.is_file():
                 continue
-            relative = (Path(prefix) / path.relative_to(source)).as_posix()
+            relative_source = path.relative_to(source)
+            if "__pycache__" in relative_source.parts or path.suffix in {".pyc", ".pyo"}:
+                continue
+            relative = (Path(prefix) / relative_source).as_posix()
             info = zipfile.ZipInfo(relative, date_time=zip_time)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.create_system = 3

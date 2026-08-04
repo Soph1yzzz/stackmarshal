@@ -15,7 +15,7 @@
 
 - [x] Ruff
 - [x] mypy strict
-- [x] 32 automated tests
+- [x] 33 automated tests
 - [x] 98% branch-aware coverage
 - [x] package build and Twine validation
 - [x] schema meta-validation

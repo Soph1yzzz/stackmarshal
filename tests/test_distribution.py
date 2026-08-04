@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 import re
 import subprocess
 import sys
+import zipfile
 
 from jsonschema import Draft202012Validator
 
@@ -14,6 +16,32 @@ from stackmarshal.constants import Mode, Status
 from stackmarshal.state import create_run
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_release_module() -> object:
+    path = ROOT / "scripts" / "build_release.py"
+    spec = importlib.util.spec_from_file_location("stackmarshal_build_release", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_release_zip_excludes_python_cache(tmp_path: Path) -> None:
+    source = tmp_path / "skill"
+    (source / "scripts" / "__pycache__").mkdir(parents=True)
+    (source / "SKILL.md").write_text("# Skill", encoding="utf-8")
+    (source / "scripts" / "tool.py").write_text("print('ok')", encoding="utf-8")
+    (source / "scripts" / "tool.pyc").write_bytes(b"cache")
+    (source / "scripts" / "__pycache__" / "tool.cpython-311.pyc").write_bytes(b"cache")
+    destination = tmp_path / "skill.zip"
+    module = _load_release_module()
+    module.zip_tree(source, destination, "stackmarshal", 1_700_000_000)  # type: ignore[attr-defined]
+    with zipfile.ZipFile(destination) as archive:
+        names = archive.namelist()
+    assert "stackmarshal/SKILL.md" in names
+    assert "stackmarshal/scripts/tool.py" in names
+    assert not any("__pycache__" in name or name.endswith((".pyc", ".pyo")) for name in names)
 
 
 def test_json_schemas_are_valid_and_accept_runtime_examples(tmp_path: Path) -> None:
