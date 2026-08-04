@@ -10,6 +10,7 @@
     "status",
     "current_phase",
     "next_action",
+    "worktree_fingerprint",
     "integrity_algorithm",
     "integrity_key_id",
     "integrity_hmac_sha256"
@@ -21,6 +22,10 @@
     "project_identity": {"type": ["string", "null"]},
     "git_head": {"type": ["string", "null"]},
     "dirty": {"type": "boolean"},
+    "worktree_fingerprint": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$"
+    },
     "mode": {"enum": ["research", "prepare", "build", "resume"]},
     "status": {"type": "string"},
     "current_phase": {"type": "string"},

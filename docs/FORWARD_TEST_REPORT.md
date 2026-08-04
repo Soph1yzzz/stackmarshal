@@ -11,7 +11,7 @@ Date: 2026-08-04
   lock, checkpoint, resume, validation, formal stop, and report.
 - Budget exhaustion, invalid transition, repeated-state protection, unsafe lock, malformed JSON,
   strict run IDs, workspace escape, install hooks, secret redaction, and receipt-bound rollback.
-- Git HEAD, dirty-state, repository-lineage identity, HMAC checkpoint integrity, and future-schema rejection.
+- Git HEAD, dirty-state, exact tracked/staged/untracked fingerprint, repository-lineage identity, HMAC checkpoint integrity, and future-schema rejection.
 - Direct Skill fallback execution without runtime package dependencies.
 - Installed CLI wrapper execution with an explicit external `--root`.
 - JSON Schema meta-validation and runtime example validation.
@@ -32,6 +32,6 @@ and external text that does not satisfy the explicit invocation gate.
 
 ## Result
 
-40 tests were collected after Codex Security remediation. Windows ran 39 passes with the
-POSIX-symlink case skipped by operating-system privilege; the identical symlink rejection path
-was executed successfully under WSL/Linux. Branch-aware coverage is 95%.
+44 tests were collected after Codex Security remediation and reverse hardening. Windows ran
+43 passes with the POSIX-symlink case skipped by operating-system privilege; the identical
+symlink rejection path was executed successfully under WSL/Linux. Branch-aware coverage is 94%.

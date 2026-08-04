@@ -125,10 +125,11 @@ redactし、provenanceを保存します。licenseなし、危険なinstall hook
 
 脆弱性報告は[SECURITY.md](SECURITY.md)を参照してください。
 
-Checkpoint署名鍵はRepository外の`~/.stackmarshal/checkpoint-signing.key`へ保存されます。
-管理されたユーザー状態領域や鍵移行が必要な場合は、`STACKMARSHAL_STATE_HOME`または
-`STACKMARSHAL_CHECKPOINT_KEY_FILE`を設定してください。鍵を失ったcheckpointは、意図的に
-黙って信頼されません。
+Checkpointとacquisition receiptの署名鍵はRepository外の
+`~/.stackmarshal/integrity-signing.key`へ保存されます。Checkpointはtracked、staged、untrackedを
+含むworktree内容fingerprintも固定します。管理されたユーザー状態領域や鍵移行が必要な場合は、
+`STACKMARSHAL_STATE_HOME`または`STACKMARSHAL_SIGNING_KEY_FILE`を設定してください。
+鍵を失った状態ファイルは、意図的に黙って信頼されません。
 
 ## 開発
 

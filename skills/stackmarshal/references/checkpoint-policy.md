@@ -7,8 +7,9 @@ failures, changed files, tests, stop reason, one next action, do-not-repeat entr
 and resume command.
 
 Resume validates schema, the user-local HMAC signature, repository-lineage identity,
-Git HEAD and worktree, locks, and provenance. The signing key is stored outside the
-repository; missing, replaced, or mismatched keys cause a hard rejection. Skip completed
+Git HEAD, dirty state, and the exact tracked/staged/untracked worktree fingerprint, plus
+locks and provenance. The signing key is stored outside the repository; missing, replaced,
+or mismatched keys cause a hard rejection. Skip completed
 environment audits, unchanged candidate
 research, rejected candidates, failed PoCs, passed tests, and frozen decisions.
 Refresh only when commits, dependency versions, requirements, checkpoint freshness,

@@ -51,6 +51,55 @@ def _run_git(root: Path, *args: str) -> str | None:
     return result.stdout.strip()
 
 
+def _run_git_bytes(root: Path, *args: str) -> bytes:
+    try:
+        result = subprocess.run(
+            ["git", *args], cwd=root, check=True, capture_output=True, timeout=30
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError(f"Git worktree fingerprint failed: {' '.join(args)}") from exc
+    return result.stdout
+
+
+def worktree_fingerprint(root: Path) -> str | None:
+    """Hash tracked diffs plus untracked file contents for checkpoint resume safety."""
+
+    resolved = root.resolve()
+    if _run_git(resolved, "rev-parse", "HEAD") is None:
+        return None
+    digest = hashlib.sha256()
+    for label, args in (
+        (b"tracked\0", ("diff", "--binary", "HEAD", "--")),
+        (b"staged\0", ("diff", "--binary", "--cached", "HEAD", "--")),
+    ):
+        digest.update(label)
+        digest.update(_run_git_bytes(resolved, *args))
+    untracked = _run_git_bytes(
+        resolved, "ls-files", "--others", "--exclude-standard", "-z"
+    )
+    for raw_name in sorted(item for item in untracked.split(b"\0") if item):
+        relative_text = raw_name.decode("utf-8", errors="surrogateescape")
+        relative = Path(relative_text)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError(f"Unsafe untracked path from Git: {relative_text!r}")
+        candidate = resolved / relative
+        digest.update(b"untracked\0")
+        digest.update(raw_name)
+        digest.update(b"\0")
+        if candidate.is_symlink():
+            digest.update(b"symlink\0")
+            digest.update(str(candidate.readlink()).encode("utf-8", errors="surrogateescape"))
+        elif candidate.is_file():
+            digest.update(b"file\0")
+            with candidate.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        else:
+            raise ValueError(f"Untracked worktree path changed during fingerprint: {relative_text}")
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def project_info(root: Path) -> ProjectInfo:
     resolved = root.resolve()
     head = _run_git(resolved, "rev-parse", "HEAD")

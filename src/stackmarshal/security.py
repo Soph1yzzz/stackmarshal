@@ -109,8 +109,11 @@ def classify_command(argv: Iterable[str], project_root: Path | None = None) -> C
         )
 
     if re.search(
-        r"\b(cat|type|read|get-content|printenv|env)\b.*"
-        r"(\.ssh|\.aws|\.azure|credentials|keychain|secret|token|password|private[_-]?key)",
+        r"\b(cat|type|read|get-content|printenv|env|head|tail|grep|rg|find)\b.*"
+        r"(\.env(?:\b|\.)|\.ssh|\.aws|\.azure|\.netrc|\.npmrc|\.pypirc|"
+        r"/etc/shadow|id_rsa|id_ed25519|credentials|kubeconfig|"
+        r"application_default_credentials|docker[/\\\\]config\.json|keychain|"
+        r"secret|token|password|private[_-]?key)",
         joined,
     ):
         return CommandDecision(
@@ -162,7 +165,11 @@ def classify_command(argv: Iterable[str], project_root: Path | None = None) -> C
             ("installs outside the project",),
         )
 
-    if re.search(r"\b(rm|del|remove-item|rmdir|git\s+clean|git\s+reset\s+--hard)\b", joined):
+    if re.search(
+        r"\b(rm|del|remove-item|rmdir|git\s+clean|git\s+reset\s+--hard)\b|"
+        r"\bfind\b.*(?:-delete|-exec|-execdir)\b",
+        joined,
+    ):
         return CommandDecision(
             CommandClass.PROJECT_WRITE,
             True,

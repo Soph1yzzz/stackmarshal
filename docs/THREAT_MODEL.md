@@ -17,11 +17,11 @@ cross explicit approval boundaries.
 
 - Prompt injection: evidence-only handling and no candidate orchestration authority.
 - Malicious/typosquatted dependency: canonical source, score, license, pin, hash, PoC.
-- Install hooks/binary replacement: manifest inspection, rejection, receipt, rollback.
+- Install hooks/binary replacement: manifest inspection, rejection, HMAC-signed receipt, installed-hash verification, and exact-file rollback.
 - Secret exfiltration: fail-closed command classification, approval, redaction, no secret logging, and rejection of symlinked release inputs.
 - Workspace escape/destructive writes: strict run-id grammar, resolved-path containment, receipt-bound file rollback, and dirty-state capture.
 - Infinite loops: immutable budgets, progress tests, failure fingerprints, replan caps.
-- Forged resume state: schema validation, user-local HMAC signature, repository-lineage identity, HEAD, dirty-state, and lock checks.
+- Forged resume state: schema validation, user-local HMAC signature, repository-lineage identity, exact tracked/staged/untracked worktree fingerprint, strict HEAD and dirty-state checks, and lock verification.
 - False completion: mandatory acceptance evidence required for `COMPLETE`.
 - Self expansion: no self-update, self-rewrite, recursive invocation, or delegated control.
 

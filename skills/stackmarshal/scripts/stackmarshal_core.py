@@ -126,15 +126,24 @@ def progress(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def checkpoint_key_path() -> Path:
-    configured = os.environ.get("STACKMARSHAL_CHECKPOINT_KEY_FILE")
+    configured = os.environ.get("STACKMARSHAL_SIGNING_KEY_FILE") or os.environ.get(
+        "STACKMARSHAL_CHECKPOINT_KEY_FILE"
+    )
     if configured:
-        return Path(configured).expanduser()
-    state_home = Path(os.environ.get("STACKMARSHAL_STATE_HOME", Path.home() / ".stackmarshal"))
-    return state_home.expanduser() / "checkpoint-signing.key"
+        path = Path(configured).expanduser()
+    else:
+        state_home = Path(os.environ.get("STACKMARSHAL_STATE_HOME", Path.home() / ".stackmarshal"))
+        path = state_home.expanduser() / "integrity-signing.key"
+    if not path.is_absolute():
+        raise ValueError("StackMarshal signing key path must be absolute")
+    return path
 
 
 def load_or_create_checkpoint_key() -> bytes:
-    path = checkpoint_key_path()
+    path = checkpoint_key_path().resolve(strict=False)
+    project_root = Path.cwd().resolve()
+    if path == project_root or project_root in path.parents:
+        raise ValueError("StackMarshal signing key must be stored outside the project")
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if not path.exists():
         key = secrets.token_bytes(32)

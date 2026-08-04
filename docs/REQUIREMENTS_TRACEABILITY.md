@@ -8,11 +8,11 @@
 | Research | Gate, staged bounded research, evidence compression | `research.py`, Skill policy | unit tests and docs |
 | Capability | Status map and cross-ecosystem categories | schemas and Skill policy | schema tests |
 | Candidate trust | 100-point scoring and hard disqualifiers | `scoring.py` | unit tests |
-| Acquisition | Pinning, manifest inspection, receipt, rollback | `acquisition.py`, `security.py`, `lock.py` | adversarial/unit tests |
+| Acquisition | Pinning, manifest inspection, HMAC-signed receipt, replacement-aware exact-file rollback | `acquisition.py`, `integrity.py`, `security.py`, `lock.py` | adversarial/unit tests |
 | Freeze | Decision record and capped research re-entry | Skill workflow and templates | forward test matrix |
 | State | Deterministic transitions and append-only events | `state.py` | unit/integration tests |
 | Stop harness | Priority, budgets, failure fingerprints, stagnation | `harness.py`, `budget.py`, `failure.py`, `progress.py` | stop tests |
-| Checkpoint | HMAC integrity, repository-lineage identity, HEAD/dirty warnings, do-not-repeat | `checkpoint.py`, `state.py` | unit/adversarial tests |
+| Checkpoint | HMAC integrity, repository-lineage identity, exact worktree fingerprint, strict HEAD/dirty validation, do-not-repeat | `checkpoint.py`, `integrity.py`, `state.py` | unit/adversarial tests |
 | CLI | Specified commands and machine JSON | `cli.py` | CLI integration tests |
 | Security | Untrusted text, fail-closed command classes, redaction, strict run IDs, workspace/release boundaries | `security.py`, `cli.py`, release builder, Skill policy | adversarial tests/Codex Security |
 | Distribution | Skill folder, Python package, CI, release assets | `skills/`, `pyproject.toml`, workflows, release script | build/release checks |

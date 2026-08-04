@@ -17,6 +17,7 @@ from stackmarshal.budget import check, consume
 from stackmarshal.checkpoint import create_checkpoint, inspect_checkpoint
 from stackmarshal.config import default_config, load_config
 from stackmarshal.constants import CommandClass, Mode, Phase, Status
+from stackmarshal.integrity import sign_record
 from stackmarshal.lock import verify_lock
 from stackmarshal.models import BudgetState, ProgressSnapshot
 from stackmarshal.progress import evaluate
@@ -243,15 +244,19 @@ def test_acquisition_receipt_save_overwrite_and_directory_rollback(tmp_path: Pat
     directory = root / "remove-me"
     directory.mkdir()
     dir_receipt = AcquisitionReceipt(
-        "d",
-        "file://x",
-        "1",
-        None,
-        None,
-        str(directory),
-        (str(directory),),
-        (str(directory),),
-        "now",
+        **sign_record(
+            {
+                "candidate_id": "d",
+                "source": "file://x",
+                "version": "1",
+                "commit": None,
+                "sha256": None,
+                "target": str(directory),
+                "files_created": (str(directory),),
+                "rollback": (str(directory),),
+                "timestamp": "now",
+            }
+        )
     )
     with pytest.raises(ValueError, match="recursive directory"):
         rollback(dir_receipt, root)
@@ -318,8 +323,8 @@ def test_events_stop_state_schema_and_checkpoint_warnings(tmp_path: Path) -> Non
     other.write_text("other", encoding="utf-8")
     subprocess.run(["git", "add", "other.txt"], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-qm", "other"], cwd=tmp_path, check=True)
+    with pytest.raises(ValueError, match="Git HEAD mismatch"):
+        inspect_checkpoint(checkpoint, tmp_path)
     (tmp_path / "dirty.txt").write_text("dirty", encoding="utf-8")
-    warnings = inspect_checkpoint(checkpoint, tmp_path)["warnings"]
-    assert "Git HEAD changed since checkpoint" in warnings
-    assert "Git dirty state changed since checkpoint" in warnings
-    assert "Run is already complete" in warnings
+    with pytest.raises(ValueError, match=r"worktree fingerprint|Git HEAD mismatch"):
+        inspect_checkpoint(checkpoint, tmp_path)

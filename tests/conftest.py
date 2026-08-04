@@ -11,5 +11,7 @@ def isolated_stackmarshal_state(
 ) -> None:
     """Keep checkpoint signing keys and user state isolated from the developer machine."""
 
-    monkeypatch.setenv("STACKMARSHAL_STATE_HOME", str(tmp_path / "user-state"))
+    state_home = tmp_path.parent / f"{tmp_path.name}-user-state"
+    monkeypatch.setenv("STACKMARSHAL_STATE_HOME", str(state_home))
+    monkeypatch.delenv("STACKMARSHAL_SIGNING_KEY_FILE", raising=False)
     monkeypatch.delenv("STACKMARSHAL_CHECKPOINT_KEY_FILE", raising=False)

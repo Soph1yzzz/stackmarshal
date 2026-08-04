@@ -4,6 +4,7 @@ import gzip
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -161,6 +162,42 @@ def test_dependency_free_skill_fallback_commands(tmp_path: Path) -> None:
         str(checkpoint_output),
     )
     assert checkpoint.returncode == 0 and checkpoint_output.exists()
+
+
+def test_dependency_free_fallback_rejects_project_local_signing_key(tmp_path: Path) -> None:
+    checkpoint_input = tmp_path / "checkpoint-input.json"
+    checkpoint_input.write_text(
+        json.dumps(
+            {
+                "run_id": "run-12345678",
+                "project_identity": "identity",
+                "status": "CHECKPOINT_READY",
+                "current_phase": "CHECKPOINTING",
+                "next_action": "continue",
+            }
+        ),
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment["STACKMARSHAL_STATE_HOME"] = str(tmp_path / ".stackmarshal-user")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "skills" / "stackmarshal" / "scripts" / "stackmarshal_core.py"),
+            "checkpoint",
+            str(checkpoint_input),
+            "--output",
+            str(tmp_path / "checkpoint.json"),
+        ],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 2
+    assert "outside the project" in result.stderr
 
 
 def test_installed_cli_wrappers_forward_root(tmp_path: Path) -> None:

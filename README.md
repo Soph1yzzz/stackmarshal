@@ -149,11 +149,12 @@ Runtime state uses:
 └── runs/<run-id>/             runtime state, events, failures, checkpoint
 ```
 
-`runs/` is ignored by default except checkpoint artifacts. Checkpoints are signed with a
-32-byte key stored outside the repository at `~/.stackmarshal/checkpoint-signing.key`.
-Set `STACKMARSHAL_STATE_HOME` or `STACKMARSHAL_CHECKPOINT_KEY_FILE` when a controlled
-user-state location or explicit key migration is required. Losing the key intentionally
-prevents old checkpoints from being trusted silently.
+`runs/` is ignored by default except checkpoint artifacts. Checkpoints and acquisition
+receipts are signed with a 32-byte key stored outside the repository at
+`~/.stackmarshal/integrity-signing.key`. Checkpoints also bind the exact tracked, staged,
+and untracked worktree fingerprint. Set `STACKMARSHAL_STATE_HOME` or
+`STACKMARSHAL_SIGNING_KEY_FILE` when a controlled user-state location or explicit key
+migration is required. Losing the key intentionally prevents old state from being trusted silently.
 
 ## Development
 

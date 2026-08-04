@@ -77,6 +77,7 @@ def validate_json_file(path: Path, kind: str) -> dict[str, Any]:
             "status",
             "current_phase",
             "next_action",
+            "worktree_fingerprint",
             "integrity_algorithm",
             "integrity_key_id",
             "integrity_hmac_sha256",
