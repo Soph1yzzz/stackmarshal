@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 from datetime import UTC, datetime
 import gzip
 import hashlib
@@ -107,6 +108,38 @@ def source_archive(destination: Path, version: str, epoch: int) -> None:
         compressed.write(tar_buffer.getvalue())
 
 
+def normalize_tar_gz(path: Path, epoch: int) -> None:
+    """Rewrite an sdist with stable metadata and gzip headers."""
+    entries: list[tuple[tarfile.TarInfo, bytes | None]] = []
+    with tarfile.open(path, "r:gz") as source:
+        for member in source.getmembers():
+            payload: bytes | None = None
+            if member.isfile():
+                extracted = source.extractfile(member)
+                if extracted is None:
+                    raise ValueError(f"Could not read archive member: {member.name}")
+                payload = extracted.read()
+            normalized = copy.copy(member)
+            normalized.uid = 0
+            normalized.gid = 0
+            normalized.uname = ""
+            normalized.gname = ""
+            normalized.mtime = epoch
+            normalized.pax_headers = {}
+            normalized.mode = 0o755 if normalized.isdir() else 0o644
+            entries.append((normalized, payload))
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    tar_buffer = io.BytesIO()
+    with tarfile.open(fileobj=tar_buffer, mode="w", format=tarfile.PAX_FORMAT) as archive:
+        for member, payload in sorted(entries, key=lambda item: item[0].name):
+            archive.addfile(member, io.BytesIO(payload) if payload is not None else None)
+    with temporary.open("wb") as raw, gzip.GzipFile(
+        filename="", mode="wb", fileobj=raw, mtime=epoch, compresslevel=9
+    ) as compressed:
+        compressed.write(tar_buffer.getvalue())
+    temporary.replace(path)
+
+
 def write_json(path: Path, data: object) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -135,6 +168,8 @@ def main() -> int:
     release.mkdir()
 
     run(sys.executable, "-m", "build", source_date_epoch=epoch)
+    for archive in dist.glob("*.tar.gz"):
+        normalize_tar_gz(archive, epoch)
     run(sys.executable, "-m", "twine", "check", *[str(path) for path in sorted(dist.iterdir())], source_date_epoch=epoch)
     for artifact in sorted(dist.iterdir()):
         shutil.copy2(artifact, release / artifact.name)

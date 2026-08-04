@@ -36,7 +36,7 @@
 - PASS: Python package and `stackmarshal` executable with zero runtime dependencies.
 - PASS: English primary README and Japanese secondary README.
 - PASS: Apache-2.0, SECURITY, CONTRIBUTING, Code of Conduct, RFC process, issue/PR templates.
-- PASS: 33 tests, Ruff, mypy strict, 98% branch-aware coverage, build, and Twine validation.
+- PASS: 34 tests, Ruff, mypy strict, 98% branch-aware coverage, build, and Twine validation.
 - PASS: Linux/macOS/Windows CI matrix and commit-pinned CodeQL workflow.
 - PASS: reproducible Skill/source archives, wheel/sdist, SHA256SUMS, SBOM, and provenance.
 

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import gzip
 import importlib.util
+import io
 import json
 from pathlib import Path
 import re
 import subprocess
 import sys
+import tarfile
 import zipfile
 
 from jsonschema import Draft202012Validator
@@ -25,6 +28,26 @@ def _load_release_module() -> object:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_release_sdist_normalization_is_reproducible(tmp_path: Path) -> None:
+    module = _load_release_module()
+    archives = [tmp_path / "one.tar.gz", tmp_path / "two.tar.gz"]
+    for index, path in enumerate(archives, start=1):
+        tar_buffer = io.BytesIO()
+        with tarfile.open(fileobj=tar_buffer, mode="w") as archive:
+            info = tarfile.TarInfo("package/file.txt")
+            payload = b"same-content"
+            info.size = len(payload)
+            info.mtime = index
+            info.uid = index
+            archive.addfile(info, io.BytesIO(payload))
+        with path.open("wb") as raw, gzip.GzipFile(
+            filename=f"source-{index}", mode="wb", fileobj=raw, mtime=index
+        ) as compressed:
+            compressed.write(tar_buffer.getvalue())
+        module.normalize_tar_gz(path, 1_700_000_000)  # type: ignore[attr-defined]
+    assert archives[0].read_bytes() == archives[1].read_bytes()
 
 
 def test_release_zip_excludes_python_cache(tmp_path: Path) -> None:
