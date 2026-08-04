@@ -116,6 +116,21 @@ def test_tree_hash_rejects_symlinks_when_supported(tmp_path: Path) -> None:
     with pytest.raises(installer.InstallError):  # type: ignore[attr-defined]
         installer.tree_hash(root)  # type: ignore[attr-defined]
 
+    managed = tmp_path / "managed"
+    managed.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    redirected = managed / ".staging"
+    redirected.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(installer.InstallError):  # type: ignore[attr-defined]
+        installer.ensure_managed_directory(redirected / "run" / "downloads", managed)  # type: ignore[attr-defined]
+    assert not (outside / "run").exists()
+
+    root_link = tmp_path / "install-link"
+    root_link.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(installer.InstallError):  # type: ignore[attr-defined]
+        installer.ensure_root_directory(root_link, "install root")  # type: ignore[attr-defined]
+
 
 def test_directory_swap_can_rollback_and_finalize(tmp_path: Path) -> None:
     installer = _load_installer()
@@ -162,6 +177,7 @@ def test_managed_roots_reject_filesystem_root_and_overlap(tmp_path: Path) -> Non
 def test_installer_lock_rejects_parallel_use(tmp_path: Path) -> None:
     installer = _load_installer()
     lock_path = tmp_path / "app" / ".install.lock"
+    lock_path.parent.mkdir()
     first = installer.acquire_installer_lock(lock_path)  # type: ignore[attr-defined]
     try:
         with pytest.raises(installer.InstallError):  # type: ignore[attr-defined]

@@ -111,7 +111,10 @@ def validate_download_url(url: str) -> urllib.parse.ParseResult:
 
 def download(url: str, destination: Path) -> None:
     validate_download_url(url)
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.parent.is_symlink() or not destination.parent.is_dir():
+        raise InstallError(f"Download directory is not a regular directory: {destination.parent}")
+    if destination.exists() or destination.is_symlink():
+        raise InstallError(f"Refusing to overwrite an existing download target: {destination}")
     request = urllib.request.Request(url, headers={"User-Agent": "StackMarshal-Installer/1"})  # noqa: S310
     try:
         with urllib.request.urlopen(request, timeout=60) as response, destination.open("wb") as output:  # noqa: S310
@@ -130,7 +133,26 @@ def download(url: str, destination: Path) -> None:
         raise InstallError(f"Downloaded file is empty: {destination.name}")
 
 
+def _absolute(path: Path) -> Path:
+    return Path(os.path.abspath(os.fspath(path)))
+
+
+def _assert_lexically_contained(path: Path, root: Path, *, allow_root: bool = False) -> Path:
+    absolute_root = _absolute(root)
+    absolute = _absolute(path)
+    if absolute == absolute_root:
+        if allow_root:
+            return absolute
+        raise InstallError(f"Refusing to operate on managed root itself: {absolute}")
+    try:
+        absolute.relative_to(absolute_root)
+    except ValueError as exc:
+        raise InstallError(f"Path escapes managed root: {absolute}") from exc
+    return absolute
+
+
 def _assert_contained(path: Path, root: Path, *, allow_root: bool = False) -> Path:
+    _assert_lexically_contained(path, root, allow_root=allow_root)
     resolved_root = root.resolve()
     resolved = path.resolve()
     if resolved == resolved_root:
@@ -142,11 +164,35 @@ def _assert_contained(path: Path, root: Path, *, allow_root: bool = False) -> Pa
     return resolved
 
 
+def ensure_managed_directory(path: Path, root: Path) -> Path:
+    absolute_root = _absolute(root)
+    absolute_path = _assert_lexically_contained(path, root, allow_root=True)
+    if not absolute_root.exists() or absolute_root.is_symlink() or not absolute_root.is_dir():
+        raise InstallError(f"Managed root is not a regular directory: {absolute_root}")
+    relative = absolute_path.relative_to(absolute_root)
+    current = absolute_root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise InstallError(f"Managed directory component may not be a symlink: {current}")
+        if current.exists():
+            if not current.is_dir():
+                raise InstallError(f"Managed directory component is not a directory: {current}")
+        else:
+            current.mkdir()
+        _assert_contained(current, absolute_root, allow_root=True)
+    return absolute_path
+
+
 def safe_remove(path: Path, root: Path) -> None:
     if not path.exists() and not path.is_symlink():
         return
+    _assert_lexically_contained(path, root)
+    if path.is_symlink():
+        path.unlink()
+        return
     resolved = _assert_contained(path, root)
-    if path.is_symlink() or path.is_file():
+    if path.is_file():
         path.unlink()
     elif resolved.is_dir():
         shutil.rmtree(resolved)
@@ -196,7 +242,7 @@ def safe_extract_skill_zip(archive_path: Path, destination: Path) -> Path:
         raise InstallError(f"Skill archive is not a regular file: {archive_path}")
     if archive_path.stat().st_size > MAX_SKILL_ARCHIVE_BYTES:
         raise InstallError("Skill archive exceeds the compressed-size limit")
-    destination.mkdir(parents=True, exist_ok=True)
+    ensure_managed_directory(destination, destination.parent)
     seen: set[str] = set()
     with zipfile.ZipFile(archive_path) as archive:
         infos = archive.infolist()
@@ -230,11 +276,11 @@ def safe_extract_skill_zip(archive_path: Path, destination: Path) -> Path:
             target = destination.joinpath(*pure.parts)
             _assert_contained(target, destination)
             if info.is_dir():
-                target.mkdir(parents=True, exist_ok=True)
+                ensure_managed_directory(target, destination)
                 continue
             if mode and not stat.S_ISREG(mode):
                 raise InstallError(f"Skill archive contains a non-regular file: {info.filename}")
-            target.parent.mkdir(parents=True, exist_ok=True)
+            ensure_managed_directory(target.parent, destination)
             with archive.open(info) as source, target.open("wb") as output:
                 shutil.copyfileobj(source, output)
     skill = destination / "stackmarshal"
@@ -245,7 +291,8 @@ def safe_extract_skill_zip(archive_path: Path, destination: Path) -> Path:
 
 
 def atomic_write_bytes(path: Path, data: bytes, *, mode: int | None = None) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.parent.is_symlink() or not path.parent.is_dir():
+        raise InstallError(f"Atomic-write directory is not a regular directory: {path.parent}")
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     temporary.write_bytes(data)
     if mode is not None:
@@ -337,15 +384,41 @@ def default_codex_home() -> Path:
 
 
 def validate_managed_roots(install_root: Path, codex_home: Path) -> None:
-    home = Path.home().resolve()
+    home = _absolute(Path.home())
     for label, root in (("install root", install_root), ("Codex home", codex_home)):
-        filesystem_root = Path(root.anchor).resolve()
-        if root in (filesystem_root, home):
-            raise InstallError(f"Refusing unsafe {label}: {root}")
-        if root.exists() and not root.is_dir():
-            raise InstallError(f"{label.capitalize()} is not a directory: {root}")
+        absolute = _absolute(root)
+        filesystem_root = _absolute(Path(absolute.anchor))
+        if absolute in (filesystem_root, home):
+            raise InstallError(f"Refusing unsafe {label}: {absolute}")
+        if absolute.exists() and (absolute.is_symlink() or not absolute.is_dir()):
+            raise InstallError(f"{label.capitalize()} is not a regular directory: {absolute}")
     if install_root == codex_home or install_root in codex_home.parents or codex_home in install_root.parents:
         raise InstallError("Install root and Codex home must be separate, non-overlapping directories")
+
+
+def ensure_root_directory(path: Path, label: str) -> Path:
+    absolute = _absolute(path)
+    if not absolute.is_absolute() or not absolute.anchor:
+        raise InstallError(f"{label.capitalize()} must be absolute: {absolute}")
+    missing: list[Path] = []
+    current = absolute
+    while not current.exists() and not current.is_symlink():
+        missing.append(current)
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    if current.is_symlink() or not current.is_dir():
+        raise InstallError(f"{label.capitalize()} ancestor is not a regular directory: {current}")
+    for directory in reversed(missing):
+        if directory.is_symlink():
+            raise InstallError(f"{label.capitalize()} component may not be a symlink: {directory}")
+        directory.mkdir()
+        if directory.is_symlink() or not directory.is_dir():
+            raise InstallError(f"Could not create a regular {label}: {directory}")
+    if absolute.is_symlink() or not absolute.is_dir():
+        raise InstallError(f"{label.capitalize()} is not a regular directory: {absolute}")
+    return absolute
 
 
 @dataclass
@@ -373,7 +446,10 @@ class InstallerLock:
 
 
 def acquire_installer_lock(path: Path) -> InstallerLock:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.parent.is_symlink() or not path.parent.is_dir():
+        raise InstallError(f"Installer lock directory is not a regular directory: {path.parent}")
+    if path.is_symlink():
+        raise InstallError(f"Installer lock may not be a symlink: {path}")
     handle = path.open("a+b")
     try:
         handle.seek(0, os.SEEK_END)
@@ -618,10 +694,16 @@ class DirectorySwap:
 
 def apply_directory_swap(staged: Path, destination: Path, managed_root: Path) -> DirectorySwap:
     _assert_contained(staged, managed_root)
-    _assert_contained(destination, managed_root)
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    _assert_lexically_contained(destination, managed_root)
+    if staged.is_symlink() or not staged.is_dir():
+        raise InstallError(f"Staged swap source is not a regular directory: {staged}")
+    ensure_managed_directory(destination.parent, managed_root)
     backup: Path | None = None
-    if destination.exists() or destination.is_symlink():
+    if destination.is_symlink():
+        raise InstallError(f"Swap destination may not be a symlink: {destination}")
+    if destination.exists() and not destination.is_dir():
+        raise InstallError(f"Swap destination is not a directory: {destination}")
+    if destination.exists():
         backup = destination.with_name(f".{destination.name}.old-{uuid.uuid4().hex}")
         os.replace(destination, backup)
     try:
@@ -634,8 +716,7 @@ def apply_directory_swap(staged: Path, destination: Path, managed_root: Path) ->
 
 
 def backup_modified_skill(source: Path, install_root: Path) -> Path:
-    backups = install_root / "backups"
-    backups.mkdir(parents=True, exist_ok=True)
+    backups = ensure_managed_directory(install_root / "backups", install_root)
     for old in backups.glob("stackmarshal-skill-*"):
         safe_remove(old, install_root)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -655,7 +736,7 @@ def prepare_skill_swap(
 ) -> tuple[str, Path | None, Path]:
     new_hash = tree_hash(staged_skill)
     user_backup: Path | None = None
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    ensure_managed_directory(destination.parent, destination.parent.parent)
     if destination.exists() or destination.is_symlink():
         if destination.is_symlink() or not destination.is_dir():
             raise InstallError(f"Existing Skill path is not a regular directory: {destination}")
@@ -751,10 +832,12 @@ def main(argv: list[str] | None = None) -> int:
         if sys.version_info < MIN_PYTHON:
             raise InstallError("StackMarshal requires Python 3.11 or newer")
         version = normalize_version(args.version)
-        install_root = args.install_root.expanduser().resolve()
-        codex_home = args.codex_home.expanduser().resolve()
+        install_root = _absolute(args.install_root.expanduser())
+        codex_home = _absolute(args.codex_home.expanduser())
         validate_managed_roots(install_root, codex_home)
-        install_root.mkdir(parents=True, exist_ok=True)
+        install_root = ensure_root_directory(install_root, "install root")
+        if not args.cli_only:
+            codex_home = ensure_root_directory(codex_home, "Codex home")
         install_lock = acquire_installer_lock(install_root / ".install.lock")
         state_path = install_root / "install-state.json"
         previous = load_state(state_path)
@@ -776,8 +859,8 @@ def main(argv: list[str] | None = None) -> int:
         staging_root = install_root / ".staging" / uuid.uuid4().hex
         downloads = staging_root / "downloads"
         payload = staging_root / "payload"
-        downloads.mkdir(parents=True)
-        payload.mkdir(parents=True)
+        ensure_managed_directory(downloads, install_root)
+        ensure_managed_directory(payload, install_root)
         release_base_url = args.release_base_url.rstrip("/")
         checksum_path = downloads / "SHA256SUMS"
         download(f"{release_base_url}/SHA256SUMS", checksum_path)
@@ -833,6 +916,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             if staged_version is not None:
                 cli_swap = apply_directory_swap(staged_version, version_dir, install_root)
+                ensure_managed_directory(bin_dir, install_root)
                 launcher_name, launcher = launcher_text(version)
                 launcher_path = bin_dir / launcher_name
                 launcher_snapshot = snapshot_file(launcher_path)
