@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "entries": [
+    {
+      "kind": "skill",
+      "id": "owner/repository/path",
+      "source": "https://github.com/owner/repository",
+      "version": null,
+      "commit": "full-commit-sha",
+      "sha256": "artifact-sha256",
+      "license": "SPDX-ID",
+      "permissions": [],
+      "verification": [],
+      "selected_reason": ""
+    }
+  ]
+}

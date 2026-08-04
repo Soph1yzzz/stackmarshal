@@ -1,0 +1,5 @@
+display_name: StackMarshal
+short_description: Research, marshal capabilities, build, and stop safely
+default_prompt: Use StackMarshal to research the ecosystem, acquire only safe and necessary capabilities, implement within a bounded budget, verify the result, and checkpoint if completion is not possible.
+policy:
+  allow_implicit_invocation: false

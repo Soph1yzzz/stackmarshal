@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmarshal.dev/schemas/candidate.schema.json",
+  "title": "StackMarshal Candidate",
+  "type": "object",
+  "required": ["id", "kind", "source", "scores", "risks", "decision"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["reference_oss", "skill", "mcp", "plugin", "library", "cli"]},
+    "source": {"type": "object"},
+    "metadata": {"type": "object"},
+    "scores": {
+      "type": "object",
+      "properties": {
+        "requirement_fit": {"type": "number", "minimum": 0, "maximum": 1},
+        "maintenance_health": {"type": "number", "minimum": 0, "maximum": 1},
+        "security_posture": {"type": "number", "minimum": 0, "maximum": 1},
+        "architecture_quality": {"type": "number", "minimum": 0, "maximum": 1},
+        "license_compatibility": {"type": "number", "minimum": 0, "maximum": 1},
+        "platform_support": {"type": "number", "minimum": 0, "maximum": 1},
+        "integration_cost": {"type": "number", "minimum": 0, "maximum": 1},
+        "documentation": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": false
+    },
+    "risks": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "trust": {"enum": ["trusted_local", "official_registry", "verified_publisher", "established_oss", "unverified_oss", "unknown", "prohibited"]},
+    "provenance": {"type": "object"},
+    "decision": {"enum": ["selected", "rejected", "pending", "approval_required"]},
+    "verification": {"type": "array"}
+  },
+  "additionalProperties": false
+}

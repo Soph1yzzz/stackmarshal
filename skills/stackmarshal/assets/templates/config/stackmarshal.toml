@@ -1,0 +1,35 @@
+schema_version = "1.0"
+mode = "build"
+budget_profile = "standard"
+autonomy = "guarded"
+language = "auto"
+
+[limits]
+research_rounds = 3
+broad_candidates = 12
+deep_review_candidates = 3
+repository_clones = 1
+acquisition_attempts_per_capability = 2
+research_reentries = 1
+architecture_replans = 2
+attempts_per_task = 3
+same_failure_repetitions = 2
+stagnation_cycles = 2
+scope_additions = 5
+tool_calls = 120
+changed_files_soft_limit = 80
+
+[approval]
+global_write = true
+network_write = true
+secret_access = true
+billable_action = true
+publication = true
+privileged = true
+external_binary = true
+
+[state]
+commit_project_decisions = true
+ignore_runtime_runs = true
+checkpoint_on_stop = true
+checkpoint_on_complete = false

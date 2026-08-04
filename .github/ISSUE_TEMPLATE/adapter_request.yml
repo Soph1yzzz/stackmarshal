@@ -1,0 +1,31 @@
+name: Adapter request
+description: Propose support for another coding agent or capability source
+title: "[Adapter]: "
+labels: [adapter]
+body:
+  - type: input
+    id: target
+    attributes:
+      label: Target agent or ecosystem
+    validations:
+      required: true
+  - type: textarea
+    id: capability
+    attributes:
+      label: Required capabilities
+      description: Describe discovery, acquisition, execution, and verification boundaries.
+    validations:
+      required: true
+  - type: textarea
+    id: trust
+    attributes:
+      label: Security and approval impact
+      description: Permissions, secrets, network writes, binaries, billing, or publication involved.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Primary documentation and test strategy
+    validations:
+      required: true

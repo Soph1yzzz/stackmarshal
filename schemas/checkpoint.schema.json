@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmarshal.dev/schemas/checkpoint.schema.json",
+  "title": "StackMarshal Checkpoint",
+  "type": "object",
+  "required": ["schema_version", "run_id", "project_identity", "status", "current_phase", "next_action", "integrity_sha256"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run_id": {"type": "string"},
+    "timestamp": {"type": "string"},
+    "project_identity": {"type": ["string", "null"]},
+    "git_head": {"type": ["string", "null"]},
+    "dirty": {"type": "boolean"},
+    "mode": {"enum": ["research", "prepare", "build", "resume"]},
+    "status": {"type": "string"},
+    "current_phase": {"type": "string"},
+    "budget_used": {"type": "object"},
+    "budget_remaining": {"type": "object"},
+    "completed": {"type": "array", "items": {"type": "string"}},
+    "do_not_repeat": {"type": "array", "items": {"type": "string"}},
+    "next_action": {"type": "string", "minLength": 1},
+    "files_changed": {"type": "array", "items": {"type": "string"}},
+    "tests_run": {"type": "array"},
+    "stop_reason": {"type": ["object", "null"]},
+    "resume_command": {"type": "string"},
+    "integrity_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  },
+  "additionalProperties": false
+}

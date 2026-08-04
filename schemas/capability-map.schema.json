@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmarshal.dev/schemas/capability-map.schema.json",
+  "title": "StackMarshal Capability Map",
+  "type": "object",
+  "required": ["schema_version", "capabilities"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "requirement_links", "description", "status", "criticality", "acquisition_options", "verification"],
+        "properties": {
+          "id": {"type": "string"},
+          "requirement_links": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "description": {"type": "string"},
+          "status": {"enum": ["already_available", "partially_available", "missing", "prohibited", "approval_required"]},
+          "criticality": {"enum": ["mandatory", "optional"]},
+          "acquisition_options": {"type": "array"},
+          "selected_option": {},
+          "trust_level": {"type": ["string", "null"]},
+          "evidence": {"type": "array"},
+          "verification": {"type": "array"},
+          "fallback": {},
+          "approval_class": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "dependency_edges": {"type": "array"}
+  },
+  "additionalProperties": false
+}

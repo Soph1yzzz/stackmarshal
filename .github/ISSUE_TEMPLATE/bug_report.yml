@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a reproducible StackMarshal defect
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include secrets, credentials, or private repository content.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Minimal steps, command, and sanitized input.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: StackMarshal version
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Windows 11, macOS, Linux, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized logs or test evidence

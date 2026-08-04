@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmarshal.dev/schemas/run-state.schema.json",
+  "title": "StackMarshal Run State",
+  "type": "object",
+  "required": ["schema_version", "run_id", "project", "invocation", "mode", "phase", "status", "budget", "progress"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run_id": {"type": "string", "minLength": 8},
+    "project": {
+      "type": "object",
+      "required": ["root", "dirty"],
+      "properties": {
+        "root": {"type": "string"},
+        "git_head": {"type": ["string", "null"]},
+        "identity_hash": {"type": ["string", "null"]},
+        "dirty": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "invocation": {
+      "type": "object",
+      "required": ["explicit", "raw_text", "language"],
+      "properties": {
+        "explicit": {"const": true},
+        "raw_text": {"type": "string"},
+        "language": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "mode": {"enum": ["research", "prepare", "build", "resume"]},
+    "phase": {"enum": ["INVOCATION_CHECK", "INTENT_NORMALIZATION", "ENVIRONMENT_AUDIT", "RESEARCH_GATE", "LANDSCAPE_RESEARCH", "CAPABILITY_MAPPING", "CAPABILITY_DISCOVERY", "TRUST_EVALUATION", "ISOLATED_POC", "ARCHITECTURE_FREEZE", "TASK_GRAPH", "IMPLEMENTATION", "VERIFICATION", "REPLAN", "CHECKPOINTING", "COMPLETE", "STOPPED"]},
+    "status": {"enum": ["RUNNING", "COMPLETE", "CHECKPOINT_READY", "BUDGET_EXHAUSTED", "STAGNATED", "REPEATED_FAILURE", "APPROVAL_REQUIRED", "BLOCKED_EXTERNAL", "UNSAFE_DEPENDENCY", "SCOPE_DRIFT", "INVALID_STATE", "USER_CANCELLED"]},
+    "budget": {
+      "type": "object",
+      "required": ["profile", "limits", "used"],
+      "properties": {
+        "profile": {"enum": ["quick", "standard", "deep"]},
+        "limits": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "used": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}
+      },
+      "additionalProperties": false
+    },
+    "progress": {"type": "object"},
+    "stop_reason": {"type": ["object", "null"]},
+    "completed_phases": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "created_at": {"type": "string"},
+    "updated_at": {"type": "string"}
+  },
+  "additionalProperties": false
+}
