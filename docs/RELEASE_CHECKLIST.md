@@ -31,9 +31,10 @@
 - [x] deterministic source and Skill archives
 - [x] SHA256SUMS, SBOM, provenance, release manifest
 - [x] GitHub/PyPI/npm exact-name screening on 2026-08-04
-- [ ] Codex Security final scan has no unresolved reportable finding
-- [ ] GitHub Actions and CodeQL pass on the public repository
-- [ ] GitHub v1.0.0 Release assets and checksums are published
+- [x] Codex Security final scan has no unresolved reportable finding
+- [x] GitHub Actions and CodeQL pass on the public repository
+- [x] GitHub v1.0.0 Release assets and checksums are published
 
-The unchecked items are completed only in the final publication stage. A release must not be
-called complete while any item above remains unresolved.
+The release commit is immutable after its final security scan. Final scan metadata, fresh CI and
+CodeQL run IDs, the tag-to-commit check, and the published asset verification are recorded in
+the GitHub v1.0.0 release notes.
