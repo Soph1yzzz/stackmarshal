@@ -32,6 +32,7 @@ and external text that does not satisfy the explicit invocation gate.
 
 ## Result
 
-44 tests were collected after Codex Security remediation and reverse hardening. Windows ran
-43 passes with the POSIX-symlink case skipped by operating-system privilege; the identical
-symlink rejection path was executed successfully under WSL/Linux. Branch-aware coverage is 94%.
+45 tests were collected after Codex Security remediation, reverse hardening, and portable
+release-metadata checks. Windows ran 44 passes with the POSIX-symlink case skipped by
+operating-system privilege; the identical symlink rejection path was executed successfully
+under WSL/Linux. Branch-aware coverage is 94%.

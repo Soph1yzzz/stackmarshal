@@ -166,8 +166,17 @@ def normalize_tar_gz(path: Path, epoch: int) -> None:
     temporary.replace(path)
 
 
+def write_text_lf(path: Path, text: str) -> None:
+    """Write portable release metadata with LF line endings on every platform."""
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
 def write_json(path: Path, data: object) -> None:
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_text_lf(path, json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
+def write_checksums(path: Path, targets: list[Path]) -> None:
+    write_text_lf(path, "".join(f"{sha256(target)}  {target.name}\n" for target in targets))
 
 
 def main() -> int:
@@ -253,9 +262,7 @@ def main() -> int:
     }
     write_json(release / "release-manifest.json", manifest)
     checksum_targets = sorted(path for path in release.iterdir() if path.name != "SHA256SUMS")
-    (release / "SHA256SUMS").write_text(
-        "".join(f"{sha256(path)}  {path.name}\n" for path in checksum_targets), encoding="utf-8"
-    )
+    write_checksums(release / "SHA256SUMS", checksum_targets)
     print(
         json.dumps(
             {

@@ -18,8 +18,8 @@ either `COMPLETE` or a resumable formal stop state.
 - User-local HMAC signatures for checkpoints and acquisition receipts.
 - Repository-lineage identity plus exact tracked, staged, and untracked worktree fingerprints
   for safe resume.
-- Reproducible Skill/source archives, wheel/sdist, SHA-256 checksums, CycloneDX SBOM, and
-  provenance metadata.
+- Reproducible Skill/source archives, wheel/sdist, portable LF SHA-256 checksums, CycloneDX
+  SBOM, and provenance metadata.
 - Commit-pinned GitHub Actions across Windows, macOS, and Linux, plus CodeQL.
 - English primary documentation and a complete Japanese README.
 

@@ -15,7 +15,7 @@
 
 - [x] Ruff
 - [x] mypy strict
-- [x] 44 collected automated tests, including Codex Security regression groups
+- [x] 45 collected automated tests, including Codex Security and portable-release regression groups
 - [x] 94% branch-aware coverage
 - [x] package build and Twine validation
 - [x] schema meta-validation

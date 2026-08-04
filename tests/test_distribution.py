@@ -51,6 +51,21 @@ def test_release_sdist_normalization_is_reproducible(tmp_path: Path) -> None:
     assert archives[0].read_bytes() == archives[1].read_bytes()
 
 
+def test_release_metadata_uses_lf_line_endings(tmp_path: Path) -> None:
+    module = _load_release_module()
+    artifact = tmp_path / "artifact.bin"
+    artifact.write_bytes(b"payload")
+    metadata = tmp_path / "metadata.json"
+    checksums = tmp_path / "SHA256SUMS"
+
+    module.write_json(metadata, {"value": 1})  # type: ignore[attr-defined]
+    module.write_checksums(checksums, [artifact])  # type: ignore[attr-defined]
+
+    assert b"\r\n" not in metadata.read_bytes()
+    assert b"\r\n" not in checksums.read_bytes()
+    assert checksums.read_bytes().endswith(b"  artifact.bin\n")
+
+
 def test_release_zip_excludes_python_cache(tmp_path: Path) -> None:
     source = tmp_path / "skill"
     (source / "scripts" / "__pycache__").mkdir(parents=True)
