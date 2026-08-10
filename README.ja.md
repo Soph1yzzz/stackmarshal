@@ -135,6 +135,10 @@ flowchart TD
 `APPROVAL_REQUIRED`、`BLOCKED_EXTERNAL`、`UNSAFE_DEPENDENCY`、
 `SCOPE_DRIFT`、`INVALID_STATE`、`USER_CANCELLED`です。
 
+## Case Study
+
+- **Case Study #1 — RepoHealth**：ほぼ空のlocal workspaceから、CodexがStackMarshalを明示起動してruntime dependency 0のOSS-readiness CLIを作成し、tests、Ruff、strict mypy、branch-aware coverage 92%、package build、local install smokeまで完走したPhase 3B dogfoodingです。同時にlive state、budget accounting、task同期の次パッチ課題も発見しました。詳細は[日本語Case Study](docs/CASE_STUDY_01_REPOHEALTH.ja.md)（[English](docs/CASE_STUDY_01_REPOHEALTH.md)）を参照してください。
+
 ## セキュリティモデル
 
 外部README、Issue、コメント、AGENTS、SKILLは未信頼データです。それらの記述は、

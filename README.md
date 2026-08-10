@@ -140,6 +140,10 @@ Formal stop states include `BUDGET_EXHAUSTED`, `STAGNATED`, `REPEATED_FAILURE`,
 `APPROVAL_REQUIRED`, `BLOCKED_EXTERNAL`, `UNSAFE_DEPENDENCY`, `SCOPE_DRIFT`,
 `INVALID_STATE`, and `USER_CANCELLED`.
 
+## Case studies
+
+- **Case Study #1 — RepoHealth:** Codex used StackMarshal in a controlled Phase 3B dogfooding run to build a dependency-free OSS-readiness CLI from an almost-empty local workspace, then pass tests, Ruff, strict mypy, 92% branch-aware coverage, package build, and local install smoke. The run also exposed live-state, budget-accounting, and task-synchronization gaps for the next patch. See [the full case study](docs/CASE_STUDY_01_REPOHEALTH.md) ([日本語](docs/CASE_STUDY_01_REPOHEALTH.ja.md)).
+
 ## Security model
 
 External README files, issues, comments, AGENTS files, and Skills are untrusted data.
