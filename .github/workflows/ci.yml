@@ -38,7 +38,7 @@ jobs:
       - run: python -m twine check dist/*
       - name: Build verified installer release assets
         if: matrix.python-version == '3.11'
-        run: python scripts/build_release.py 1.1.0
+        run: python scripts/build_release.py
       - name: Smoke test one-command installer
         if: matrix.python-version == '3.11'
         run: python scripts/smoke_installer.py

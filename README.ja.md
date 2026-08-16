@@ -75,11 +75,11 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 再現性のためversionを固定する場合：
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.0/install.ps1))) -Version v1.1.0
+& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.1/install.ps1))) -Version v1.1.1
 ```
 
 ```bash
-curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.0/install.sh | bash -s -- --version v1.1.0
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.1/install.sh | bash -s -- --version v1.1.1
 ```
 
 GitとPython 3.11以上が前提です。未導入の場合は、検出結果を説明した上でOS package managerを
@@ -95,7 +95,7 @@ restart-pending markerを残します。再起動前の古いSkillはStackMarsha
 Skillだけを手動導入する場合も、`main`ではなく対応するRelease tagへ固定します。
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.0/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.1/skills/stackmarshal
 ```
 
 ## CLI例

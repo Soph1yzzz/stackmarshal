@@ -31,6 +31,30 @@ def _load_release_module() -> object:
     return module
 
 
+def test_release_version_defaults_to_pyproject_and_keeps_mismatch_guard() -> None:
+    module = _load_release_module()
+    current = module.project_version()  # type: ignore[attr-defined]
+    assert module.resolve_release_version(None) == current  # type: ignore[attr-defined]
+    assert module.resolve_release_version(f"v{current}") == current  # type: ignore[attr-defined]
+    try:
+        module.resolve_release_version("0.0.0")  # type: ignore[attr-defined]
+    except SystemExit as exc:
+        assert str(exc) == f"Version mismatch: requested 0.0.0, pyproject has {current}"
+    else:
+        raise AssertionError("Explicit release version mismatch must fail closed")
+
+
+def test_ci_release_build_uses_shell_neutral_project_version_resolution() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    release_commands = [
+        line.strip() for line in workflow.splitlines() if "run: python scripts/build_release.py" in line
+    ]
+    assert release_commands == ["run: python scripts/build_release.py"]
+    assert 'os: [ubuntu-latest, macos-latest, windows-latest]' in workflow
+    assert 'python-version: ["3.11", "3.12", "3.13"]' in workflow
+    assert "if: matrix.python-version == '3.11'" in workflow
+
+
 def test_release_sdist_normalization_is_reproducible(tmp_path: Path) -> None:
     module = _load_release_module()
     archives = [tmp_path / "one.tar.gz", tmp_path / "two.tar.gz"]

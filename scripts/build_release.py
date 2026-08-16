@@ -46,6 +46,16 @@ def project_version() -> str:
         return str(tomllib.load(handle)["project"]["version"])
 
 
+def resolve_release_version(requested: str | None) -> str:
+    current = project_version()
+    if requested is None:
+        return current
+    version = requested.removeprefix("v")
+    if version != current:
+        raise SystemExit(f"Version mismatch: requested {version}, pyproject has {current}")
+    return version
+
+
 def resolve_epoch(explicit: int | None) -> int:
     if explicit is not None:
         return explicit
@@ -181,14 +191,16 @@ def write_checksums(path: Path, targets: list[Path]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build deterministic StackMarshal release assets")
-    parser.add_argument("version")
+    parser.add_argument(
+        "version",
+        nargs="?",
+        help="Release version; defaults to [project].version from pyproject.toml",
+    )
     parser.add_argument("--source-date-epoch", type=int)
     parser.add_argument("--allow-dirty", action="store_true")
     args = parser.parse_args()
 
-    version = args.version.removeprefix("v")
-    if version != project_version():
-        raise SystemExit(f"Version mismatch: requested {version}, pyproject has {project_version()}")
+    version = resolve_release_version(args.version)
     if not args.allow_dirty and git("status", "--porcelain"):
         raise SystemExit("Refusing to build a release from a dirty Git worktree")
 

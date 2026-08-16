@@ -77,11 +77,11 @@ Run the same command again to update to the latest stable release or repair the 
 version. Pin a reproducible version when required:
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.0/install.ps1))) -Version v1.1.0
+& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.1/install.ps1))) -Version v1.1.1
 ```
 
 ```bash
-curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.0/install.sh | bash -s -- --version v1.1.0
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.1/install.sh | bash -s -- --version v1.1.1
 ```
 
 Git and Python 3.11 or newer are prerequisites. When either is missing, the bootstrap explains
@@ -99,7 +99,7 @@ after restart before work can begin.
 For a Skill-only manual installation, use the matching release tag:
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.0/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.1/skills/stackmarshal
 ```
 
 ## Quick CLI tour
@@ -217,10 +217,10 @@ behavior is a v1 release requirement.
 
 ## Release artifacts
 
-`python scripts/build_release.py 1.1.0` produces:
+`python scripts/build_release.py 1.1.1` produces:
 
 - `install.ps1`, `install.sh`, and the shared verified `installer.py`
-- `stackmarshal-skill-v1.1.0.zip`
+- `stackmarshal-skill-v1.1.1.zip`
 - Python wheel and source distribution
 - source archive
 - `SHA256SUMS`
