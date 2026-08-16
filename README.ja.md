@@ -26,6 +26,9 @@ Coding Agentは、調査前に実装を始める、既存OSSを再実装する�
 - **横断的なCapability Map**：Skill、MCP、プラグイン、ライブラリ、CLI、参考OSSを区別します。
 - **Supply Chain防御**：pin、hash、provenance、install hook検査、最小権限、承認ゲート、rollback receipt。
 - **Architecture Freeze**：再調査は重大条件に限定し、回数上限を持ちます。
+- **Authoritative live run**：1つのbounded jobに対してRUNNING runは1本だけ。nested workspaceは親Gitを所有repoとして誤認せず、正当なrepo bootstrapはlineage migrationとして記録します。
+- **Live activity budget**：観測可能なCodex作業をCore側のcounterへ接続し、実作業したのに`used=0`の帳簿を残しません。
+- **Canonical Task Graph**：machine-readableなtask状態と証拠を正本にし、Markdown viewへ同期して`COMPLETE`をgateします。
 - **有限停止ハーネス**：予算、同一failure fingerprint、停滞、scope driftを検出します。
 - **Checkpoint / Resume**：ユーザー領域のHMAC署名でcheckpoint判断を保護し、入力が変わらない限り完了済み範囲を再計算しません。
 - **Agent非依存Core**：v1はCodex Adapter、将来は他Agent Adapterへ拡張可能です。
@@ -85,7 +88,9 @@ GitとPython 3.11以上が前提です。未導入の場合は、検出結果を
 使用してください。downgradeは`-AllowDowngrade` / `--allow-downgrade`を明示しない限り拒否します。
 
 CLIのRuntime必須依存は**ゼロ**で、現在のPython環境やglobal Pythonへは導入しません。
-Skill導入・更新後はCodexを再起動してください。
+Skill導入・更新後はCodexを再起動してください。v1.1.1ではCodex homeのSkill外にも
+restart-pending markerを残します。再起動前の古いSkillはStackMarshal起動を拒否し、
+再起動後に同versionの新しいSkillだけがmarkerを確認・解除してから作業を開始します。
 
 Skillだけを手動導入する場合も、`main`ではなく対応するRelease tagへ固定します。
 
@@ -100,9 +105,14 @@ stackmarshal init
 stackmarshal invocation "StackMarshalを使って実装して"
 stackmarshal start --mode build --budget standard \
   --invocation "StackMarshalを使って実装して"
+stackmarshal doctor --host-skill-version 1.1.1
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
+stackmarshal activity record tool-call --amount 2 --detail "bounded host-tool batch"
+stackmarshal task add implement --summary "機能を実装" --acceptance "tests pass"
+stackmarshal task start implement
+stackmarshal task complete implement --evidence "tests/test_feature.py passed"
 stackmarshal candidate score candidate.json
 stackmarshal failure fingerprint failure.json
 stackmarshal progress evaluate current.json --previous previous.json

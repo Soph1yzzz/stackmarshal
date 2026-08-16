@@ -14,7 +14,7 @@ import tempfile
 from threading import Thread
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -102,6 +102,12 @@ def main() -> int:
             raise RuntimeError(f"Installer selected unsupported Python {python_version}")
         if not (codex_home / "skills" / "stackmarshal" / "SKILL.md").is_file():
             raise RuntimeError("Installed Skill is missing")
+        restart_marker = codex_home / ".stackmarshal-restart-required.json"
+        if not restart_marker.is_file():
+            raise RuntimeError("Restart-pending marker is missing")
+        marker = json.loads(restart_marker.read_text(encoding="utf-8"))
+        if marker.get("version") != VERSION:
+            raise RuntimeError(f"Unexpected restart marker: {marker}")
         if (install_root / ".staging").exists():
             raise RuntimeError("Installer staging directory was not cleaned")
 

@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator
 
 from stackmarshal.checkpoint import create_checkpoint
 from stackmarshal.config import default_config
-from stackmarshal.constants import Mode, Status
+from stackmarshal.constants import Mode, Status, __version__
 from stackmarshal.state import create_run
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -105,6 +105,22 @@ def test_json_schemas_are_valid_and_accept_runtime_examples(tmp_path: Path) -> N
     Draft202012Validator(schemas["capability-map.schema"]).validate(
         {"schema_version": "1.0", "capabilities": []}
     )
+    Draft202012Validator(schemas["task-graph.schema"]).validate(
+        {
+            "schema_version": "1.0",
+            "tasks": [
+                {
+                    "id": "verify",
+                    "summary": "verify",
+                    "mandatory": True,
+                    "acceptance": ["tests pass"],
+                    "status": "done",
+                    "attempts": 1,
+                    "evidence": ["pytest passed"],
+                }
+            ],
+        }
+    )
     state.status = Status.CHECKPOINT_READY
     checkpoint, _ = create_checkpoint(state, tmp_path / "checkpoint", next_action="continue")
     Draft202012Validator(schemas["checkpoint.schema"]).validate(
@@ -121,6 +137,75 @@ def _run_script(script: str, *args: str, cwd: Path | None = None) -> subprocess.
         text=True,
         timeout=60,
     )
+
+
+def test_skill_fallback_blocks_stale_host_until_matching_version_acknowledges_restart(
+    tmp_path: Path,
+) -> None:
+    codex_home = tmp_path / "codex"
+    codex_home.mkdir()
+    marker = codex_home / ".stackmarshal-restart-required.json"
+    marker.write_text(
+        json.dumps({"schema_version": 1, "version": __version__}),
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["CODEX_HOME"] = str(codex_home)
+    script = ROOT / "skills" / "stackmarshal" / "scripts" / "stackmarshal_core.py"
+
+    stale = subprocess.run(
+        [sys.executable, str(script), "invocation", "$stackmarshal build"],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert stale.returncode == 0
+    stale_payload = json.loads(stale.stdout)
+    assert stale_payload["triggered"] is False
+    assert stale_payload["restart_required"] is True
+    assert stale_payload["target_version"] == __version__
+    assert marker.exists()
+
+    wrong = subprocess.run(
+        [sys.executable, str(script), "host-ready", "--version", "1.1.0"],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert wrong.returncode == 0
+    wrong_payload = json.loads(wrong.stdout)
+    assert wrong_payload["ready"] is False
+    assert wrong_payload["restart_required"] is True
+    assert marker.exists()
+
+    ready = subprocess.run(
+        [sys.executable, str(script), "host-ready", "--version", __version__],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert ready.returncode == 0
+    ready_payload = json.loads(ready.stdout)
+    assert ready_payload["ready"] is True
+    assert ready_payload["acknowledged_restart"] is True
+    assert not marker.exists()
+
+    invoked = subprocess.run(
+        [sys.executable, str(script), "invocation", "$stackmarshal build"],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert invoked.returncode == 0
+    assert json.loads(invoked.stdout)["triggered"] is True
 
 
 def test_dependency_free_skill_fallback_commands(tmp_path: Path) -> None:

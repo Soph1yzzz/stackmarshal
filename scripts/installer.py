@@ -346,6 +346,27 @@ def write_state(path: Path, state: dict[str, Any]) -> None:
     atomic_write_text(path, json.dumps(state, indent=2, sort_keys=True) + "\n")
 
 
+def restart_marker_path(codex_home: Path) -> Path:
+    return codex_home / ".stackmarshal-restart-required.json"
+
+
+def write_restart_marker(path: Path, version: str) -> None:
+    atomic_write_text(
+        path,
+        json.dumps(
+            {
+                "schema_version": 1,
+                "version": version,
+                "reason": "stackmarshal_skill_installed_or_updated",
+                "created_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+
+
 def _tty_stream() -> Any:
     candidates = ["CONIN$"] if os.name == "nt" else ["/dev/tty"]
     for candidate in candidates:
@@ -889,6 +910,10 @@ def main(argv: list[str] | None = None) -> int:
         launcher_path: Path | None = None
         launcher_snapshot: FileSnapshot | None = None
         state_snapshot = snapshot_file(state_path)
+        restart_marker = restart_marker_path(codex_home) if not args.cli_only else None
+        restart_marker_snapshot = (
+            snapshot_file(restart_marker) if restart_marker is not None else None
+        )
         prepared_skill: Path | None = None
 
         staged_version: Path | None = None
@@ -955,6 +980,9 @@ def main(argv: list[str] | None = None) -> int:
                 }
             )
 
+            if restart_marker is not None:
+                write_restart_marker(restart_marker, version)
+
             doctor: dict[str, Any] = {
                 "state": False,
                 "version": version,
@@ -980,6 +1008,8 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             try:
                 restore_file(state_path, state_snapshot, install_root)
+                if restart_marker is not None and restart_marker_snapshot is not None:
+                    restore_file(restart_marker, restart_marker_snapshot, codex_home)
                 if launcher_path is not None and launcher_snapshot is not None:
                     restore_file(launcher_path, launcher_snapshot, bin_dir)
                 if skill_swap is not None:
@@ -1034,6 +1064,7 @@ def main(argv: list[str] | None = None) -> int:
             "path_note": path_note,
             "skill_backup": str(user_skill_backup) if user_skill_backup else None,
             "restart_codex": not args.cli_only,
+            "restart_marker": str(restart_marker) if restart_marker is not None else None,
         }, indent=2))
         return 0
     except InstallError as exc:

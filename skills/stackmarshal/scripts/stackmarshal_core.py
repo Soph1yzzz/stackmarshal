@@ -41,7 +41,66 @@ def emit(data: Any) -> None:
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
+def _codex_home() -> Path:
+    configured = os.environ.get("CODEX_HOME")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    skill_root = Path(__file__).resolve().parents[1]
+    candidate = skill_root.parent.parent
+    if skill_root.parent.name == "skills" and candidate.name == ".codex":
+        return candidate
+    return (Path.home() / ".codex").resolve()
+
+
+def restart_marker_path() -> Path:
+    return _codex_home() / ".stackmarshal-restart-required.json"
+
+
+def read_restart_marker() -> dict[str, Any] | None:
+    path = restart_marker_path()
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Could not read StackMarshal restart marker: {exc}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("version"), str):
+        raise ValueError("Invalid StackMarshal restart marker")
+    return data
+
+
+def host_ready(version: str) -> dict[str, Any]:
+    marker = read_restart_marker()
+    if marker is None:
+        return {"ready": True, "restart_required": False, "version": version}
+    target = str(marker["version"])
+    if version != target:
+        return {
+            "ready": False,
+            "restart_required": True,
+            "version": version,
+            "target_version": target,
+            "reason": "host_skill_version_mismatch",
+        }
+    restart_marker_path().unlink()
+    return {
+        "ready": True,
+        "restart_required": False,
+        "version": version,
+        "acknowledged_restart": True,
+    }
+
+
 def invocation(text: str) -> dict[str, Any]:
+    marker = read_restart_marker()
+    if marker is not None:
+        return {
+            "triggered": False,
+            "mode": None,
+            "restart_required": True,
+            "target_version": marker["version"],
+            "reason": "codex_restart_required",
+        }
     normalized = re.sub(r"\s+", " ", text.casefold()).strip()
     exact = "$stackmarshal" in normalized or "stackmarshal" in normalized
     anti = any(re.search(pattern, normalized) for pattern in (
@@ -197,6 +256,8 @@ def read_object(path: str) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
+    host = sub.add_parser("host-ready")
+    host.add_argument("--version", required=True)
     inv = sub.add_parser("invocation")
     inv.add_argument("text")
     for name in ("score", "fingerprint", "budget", "progress"):
@@ -207,7 +268,9 @@ def main(argv: list[str] | None = None) -> int:
     cp.add_argument("--output", required=True)
     args = parser.parse_args(argv)
     try:
-        if args.command == "invocation":
+        if args.command == "host-ready":
+            result = host_ready(args.version)
+        elif args.command == "invocation":
             result = invocation(args.text)
         elif args.command == "score":
             result = score(read_object(args.file))

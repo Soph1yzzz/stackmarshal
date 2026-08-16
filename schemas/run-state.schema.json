@@ -14,7 +14,10 @@
         "root": {"type": "string"},
         "git_head": {"type": ["string", "null"]},
         "identity_hash": {"type": ["string", "null"]},
-        "dirty": {"type": "boolean"}
+        "dirty": {"type": "boolean"},
+        "git_toplevel": {"type": ["string", "null"]},
+        "repository_owned": {"type": "boolean"},
+        "repository_lineage": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
       },
       "additionalProperties": false
     },

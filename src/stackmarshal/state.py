@@ -61,12 +61,60 @@ def _run_git_bytes(root: Path, *args: str) -> bytes:
     return result.stdout
 
 
+def workspace_fingerprint(root: Path) -> str:
+    """Hash workspace contents while excluding VCS/runtime/build noise.
+
+    This fingerprint exists to prove that implementation work happened between
+    recorded phase boundaries, including before a new repository has a first commit.
+    """
+
+    resolved = root.resolve()
+    digest = hashlib.sha256()
+    ignored_dirs = {
+        ".git",
+        ".stackmarshal",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        "build",
+        "dist",
+        "node_modules",
+    }
+    for candidate in sorted(resolved.rglob("*"), key=lambda item: item.as_posix()):
+        try:
+            relative = candidate.relative_to(resolved)
+        except ValueError:
+            continue
+        if any(part in ignored_dirs for part in relative.parts):
+            continue
+        digest.update(relative.as_posix().encode("utf-8", errors="surrogateescape"))
+        digest.update(b"\0")
+        if candidate.is_symlink():
+            digest.update(b"symlink\0")
+            digest.update(str(candidate.readlink()).encode("utf-8", errors="surrogateescape"))
+        elif candidate.is_file():
+            digest.update(b"file\0")
+            with candidate.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        elif candidate.is_dir():
+            digest.update(b"dir\0")
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def worktree_fingerprint(root: Path) -> str | None:
     """Hash tracked diffs plus untracked file contents for checkpoint resume safety."""
 
     resolved = root.resolve()
-    if _run_git(resolved, "rev-parse", "HEAD") is None:
+    top_level = _run_git(resolved, "rev-parse", "--show-toplevel")
+    if not top_level or Path(top_level).resolve() != resolved:
         return None
+    if _run_git(resolved, "rev-parse", "HEAD") is None:
+        return workspace_fingerprint(resolved)
     digest = hashlib.sha256()
     for label, args in (
         (b"tracked\0", ("diff", "--binary", "HEAD", "--")),
@@ -102,23 +150,76 @@ def worktree_fingerprint(root: Path) -> str | None:
 
 def project_info(root: Path) -> ProjectInfo:
     resolved = root.resolve()
-    head = _run_git(resolved, "rev-parse", "HEAD")
-    status = _run_git(resolved, "status", "--porcelain")
-    top_level = _run_git(resolved, "rev-parse", "--show-toplevel")
-    roots = _run_git(resolved, "rev-list", "--max-parents=0", "HEAD")
-    remote = _run_git(resolved, "config", "--get", "remote.origin.url")
+    discovered_top_level = _run_git(resolved, "rev-parse", "--show-toplevel")
+    top_level = Path(discovered_top_level).resolve() if discovered_top_level else None
+    repository_owned = top_level == resolved
+    if repository_owned:
+        head = _run_git(resolved, "rev-parse", "HEAD")
+        status = _run_git(resolved, "status", "--porcelain")
+        roots = _run_git(resolved, "rev-list", "--max-parents=0", "HEAD")
+        remote = _run_git(resolved, "config", "--get", "remote.origin.url")
+        lineage = sorted(roots.splitlines()) if roots else []
+    else:
+        # An ancestor repository is context, not ownership. Treat this workspace
+        # as repository-free until it is explicitly bootstrapped itself.
+        head = None
+        status = None
+        remote = None
+        lineage = []
+        top_level = None
     identity_seed = json.dumps(
         {
             "root": str(resolved),
-            "git_toplevel": str(Path(top_level).resolve()) if top_level else None,
-            "root_commits": sorted(roots.splitlines()) if roots else [],
+            "git_toplevel": str(top_level) if top_level else None,
+            "root_commits": lineage,
             "remote_origin": remote or None,
         },
         sort_keys=True,
         separators=(",", ":"),
     )
     identity = hashlib.sha256(identity_seed.encode()).hexdigest()
-    return ProjectInfo(str(resolved), head, identity, bool(status))
+    return ProjectInfo(
+        root=str(resolved),
+        git_head=head,
+        identity_hash=identity,
+        dirty=bool(status),
+        git_toplevel=str(top_level) if top_level else None,
+        repository_owned=repository_owned,
+        repository_lineage=lineage,
+    )
+
+
+def refresh_project_info(state: RunState, root: Path) -> dict[str, Any] | None:
+    """Refresh mutable Git facts and permit only explicit bootstrap lineage changes."""
+
+    current = project_info(root)
+    previous = state.project
+    if current.identity_hash == previous.identity_hash:
+        state.project = current
+        state.updated_at = now_iso()
+        return None
+
+    bootstrap = previous.git_toplevel is None and current.repository_owned
+    first_commit = (
+        previous.repository_owned
+        and current.repository_owned
+        and previous.git_toplevel == current.git_toplevel
+        and not previous.repository_lineage
+        and bool(current.repository_lineage)
+    )
+    if not (bootstrap or first_commit):
+        raise ValueError("Project identity changed outside an allowed repository bootstrap")
+
+    event = {
+        "reason": "workspace_repository_bootstrap" if bootstrap else "repository_first_commit",
+        "from_identity": previous.identity_hash,
+        "to_identity": current.identity_hash,
+        "git_toplevel": current.git_toplevel,
+        "repository_lineage": current.repository_lineage,
+    }
+    state.project = current
+    state.updated_at = now_iso()
+    return event
 
 
 def validate_run_id(run_id: str) -> str:
@@ -141,6 +242,7 @@ def create_run(root: Path, invocation: str, mode: Mode, config: Config) -> RunSt
         invocation=Invocation(explicit=True, raw_text=invocation),
         mode=mode,
         budget=BudgetState(config.budget_profile, dict(config.limits), {}),
+        progress={"live_contract_version": 1},
         created_at=timestamp,
         updated_at=timestamp,
     )

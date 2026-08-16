@@ -13,6 +13,9 @@ class ProjectInfo:
     git_head: str | None = None
     identity_hash: str | None = None
     dirty: bool = False
+    git_toplevel: str | None = None
+    repository_owned: bool = False
+    repository_lineage: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

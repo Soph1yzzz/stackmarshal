@@ -28,6 +28,9 @@ StackMarshal makes those failure modes explicit and bounded.
 - **Cross-ecosystem capability mapping.** Skills, MCP, plugins, libraries, CLIs, and reference OSS remain distinct.
 - **Supply-chain controls.** Pinning, hashes, provenance, install-hook inspection, least privilege, approval gates, and rollback receipts.
 - **Architecture freeze.** Research re-entry is exceptional and capped.
+- **Authoritative live run.** A bounded job has one RUNNING owner; nested workspaces do not silently inherit an ancestor repository, and allowed repository bootstrap is recorded as lineage migration.
+- **Live activity budgets.** Observable Codex work consumes Core-owned counters instead of leaving a decorative zero-use ledger.
+- **Canonical task graph.** Machine-readable task status and evidence are synchronized into a generated Markdown view and gate `COMPLETE`.
 - **Finite stop harness.** Budgets, repeated-failure fingerprints, stagnation detection, scope-drift limits, and formal terminal states.
 - **Checkpoint/resume.** User-local HMAC signatures protect checkpoint decisions; completed work is not recomputed without a material input change.
 - **Agent-neutral Core.** v1 ships a Codex adapter; future adapters can reuse the state and policy model.
@@ -88,7 +91,10 @@ PowerShell or `--yes` on Bash only for a deliberately non-interactive installati
 remain blocked unless `-AllowDowngrade` / `--allow-downgrade` is supplied explicitly.
 
 The CLI has **zero required runtime dependencies**. It is not installed into the active/global
-Python environment. Restart Codex after installing or updating the Skill.
+Python environment. Restart Codex after installing or updating the Skill. v1.1.1 also leaves a
+restart-pending marker in the Codex home outside the Skill directory: a stale pre-restart Skill
+will refuse StackMarshal invocation, and the matching newly loaded Skill acknowledges the marker
+after restart before work can begin.
 
 For a Skill-only manual installation, use the matching release tag:
 
@@ -103,9 +109,14 @@ stackmarshal init
 stackmarshal invocation "Use StackMarshal to build this"
 stackmarshal start --mode build --budget standard \
   --invocation "Use StackMarshal to build this"
+stackmarshal doctor --host-skill-version 1.1.1
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
+stackmarshal activity record tool-call --amount 2 --detail "bounded host-tool batch"
+stackmarshal task add implement --summary "Implement the feature" --acceptance "tests pass"
+stackmarshal task start implement
+stackmarshal task complete implement --evidence "tests/test_feature.py passed"
 stackmarshal candidate score candidate.json
 stackmarshal failure fingerprint failure.json
 stackmarshal progress evaluate current.json --previous previous.json

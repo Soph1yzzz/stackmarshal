@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 SCHEMA_VERSION = "1.0"
 STATE_DIR = ".stackmarshal"
 

@@ -69,6 +69,24 @@ def validate_json_file(path: Path, kind: str) -> dict[str, Any]:
         errors = [f"missing:{key}" for key in sorted(required - set(data))]
     elif kind == "capability-map":
         errors = [] if data.get("schema_version") == "1.0" and isinstance(data.get("capabilities"), list) else ["invalid_capability_map"]
+    elif kind == "task-graph":
+        tasks = data.get("tasks")
+        errors = []
+        if data.get("schema_version") != "1.0" or not isinstance(tasks, list):
+            errors.append("invalid_task_graph")
+        else:
+            seen: set[str] = set()
+            for task in tasks:
+                if not isinstance(task, dict):
+                    errors.append("invalid_task_entry")
+                    continue
+                task_id = task.get("id")
+                if not isinstance(task_id, str) or not task_id or task_id in seen:
+                    errors.append("invalid_or_duplicate_task_id")
+                else:
+                    seen.add(task_id)
+                if task.get("status") not in {"pending", "in_progress", "done", "blocked"}:
+                    errors.append(f"invalid_task_status:{task_id}")
     elif kind == "checkpoint":
         required = {
             "schema_version",

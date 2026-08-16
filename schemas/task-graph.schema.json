@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmarshal.dev/schemas/task-graph.schema.json",
+  "title": "StackMarshal Task Graph",
+  "type": "object",
+  "required": ["schema_version", "tasks"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "summary", "mandatory", "acceptance", "status", "attempts", "evidence"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "summary": {"type": "string"},
+          "mandatory": {"type": "boolean"},
+          "acceptance": {"type": "array", "items": {"type": "string"}},
+          "status": {"enum": ["pending", "in_progress", "done", "blocked"]},
+          "attempts": {"type": "integer", "minimum": 0},
+          "evidence": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

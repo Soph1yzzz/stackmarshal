@@ -219,6 +219,20 @@ def test_unix_profile_block_quotes_the_managed_path(tmp_path: Path, monkeypatch:
     assert not (tmp_path / "injected").exists()
 
 
+def test_restart_marker_is_versioned_and_stored_in_codex_home(tmp_path: Path) -> None:
+    installer = _load_installer()
+    codex_home = tmp_path / "codex"
+    codex_home.mkdir()
+    marker = installer.restart_marker_path(codex_home)  # type: ignore[attr-defined]
+    installer.write_restart_marker(marker, "1.1.1")  # type: ignore[attr-defined]
+    assert marker.parent == codex_home
+    payload = json.loads(marker.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 1
+    assert payload["version"] == "1.1.1"
+    assert payload["reason"] == "stackmarshal_skill_installed_or_updated"
+    assert payload["created_at"].endswith("+00:00")
+
+
 def test_checksum_mismatch_fails_closed_and_cleans_staging(tmp_path: Path) -> None:
     release = tmp_path / "release"
     release.mkdir()

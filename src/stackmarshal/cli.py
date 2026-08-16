@@ -4,11 +4,14 @@ import argparse
 from collections.abc import Callable
 from dataclasses import asdict
 import json
+import os
 from pathlib import Path
+import re
 import shutil
 import sys
 from typing import Any
 
+from .activity import ActivityBudgetExhausted, completion_activity_errors, record_activity
 from .adapters.codex import CodexAdapter
 from .budget import check as check_budget
 from .checkpoint import create_checkpoint, inspect_checkpoint
@@ -24,11 +27,22 @@ from .state import (
     create_run,
     infer_mode,
     load_state,
+    now_iso,
+    refresh_project_info,
     save_state,
     stop,
     transition,
     validate_invocation,
     validate_run_id,
+    workspace_fingerprint,
+)
+from .taskgraph import (
+    add_task,
+    block_task,
+    complete_task,
+    completion_errors as task_completion_errors,
+    load_task_graph,
+    start_task,
 )
 from .validation import validate_json_file
 
@@ -66,6 +80,56 @@ def _paths(root: Path, run_id: str | None = None) -> dict[str, Path]:
     return result
 
 
+def _active_runs(root: Path) -> list[tuple[Path, Any]]:
+    runs = _paths(root)["runs"]
+    if not runs.exists():
+        return []
+    active: list[tuple[Path, Any]] = []
+    for path in sorted(runs.glob("*/run.json")):
+        state = load_state(path)
+        if state.status is Status.RUNNING:
+            active.append((path, state))
+    return active
+
+
+def _refresh_project_with_event(root: Path, path: Path, state: Any) -> None:
+    migration = refresh_project_info(state, root)
+    if migration:
+        save_state(state, path)
+        append_event(path.with_name("events.jsonl"), "project_identity_migrated", state.phase, migration)
+
+
+def _record_phase_snapshot(state: Any, root: Path, target: Phase) -> dict[str, Any]:
+    snapshots = state.progress.setdefault("phase_snapshots", {})
+    if not isinstance(snapshots, dict):
+        raise ValueError("Invalid phase_snapshots progress state")
+    snapshot = {
+        "timestamp": now_iso(),
+        "workspace_fingerprint": workspace_fingerprint(root),
+        "git_head": state.project.git_head,
+    }
+    snapshots[target.value] = snapshot
+    return snapshot
+
+
+def _completion_gate_errors(root: Path, state: Any) -> list[str]:
+    require_graph = state.mode is Mode.BUILD and int(state.progress.get("live_contract_version", 0)) >= 1
+    errors = task_completion_errors(root, require_graph=require_graph)
+    errors.extend(completion_activity_errors(state))
+    if state.mode is Mode.BUILD and require_graph:
+        snapshots = state.progress.get("phase_snapshots", {})
+        if not isinstance(snapshots, dict):
+            errors.append("invalid_phase_snapshots")
+        else:
+            implementation = snapshots.get(Phase.IMPLEMENTATION.value)
+            verification = snapshots.get(Phase.VERIFICATION.value)
+            if not isinstance(implementation, dict) or not isinstance(verification, dict):
+                errors.append("missing_live_phase_snapshots")
+            elif implementation.get("workspace_fingerprint") == verification.get("workspace_fingerprint"):
+                errors.append("no_workspace_change_during_implementation")
+    return errors
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     root = _root(args.root)
     paths = _paths(root)
@@ -88,6 +152,16 @@ def cmd_init(args: argparse.Namespace) -> int:
 
 def cmd_start(args: argparse.Namespace) -> int:
     root = _root(args.root)
+    active = _active_runs(root)
+    if active:
+        path, existing = active[-1]
+        _json({
+            "started": False,
+            "reason": "authoritative_run_already_active",
+            "run_id": existing.run_id,
+            "state": str(path),
+        })
+        return EXIT_INVALID_STATE
     if not validate_invocation(args.invocation):
         _json({"started": False, "reason": "explicit_invocation_required"})
         return EXIT_INVALID_INPUT
@@ -125,9 +199,28 @@ def cmd_state_show(args: argparse.Namespace) -> int:
 def cmd_state_transition(args: argparse.Namespace) -> int:
     root = _root(args.root)
     path, state = _find_state(root, args.run_id)
-    transition(state, Phase(args.phase))
+    _refresh_project_with_event(root, path, state)
+    target = Phase(args.phase)
+    snapshot = _record_phase_snapshot(state, root, target)
+    if target is Phase.COMPLETE:
+        errors = _completion_gate_errors(root, state)
+        if errors:
+            _json({"transitioned": False, "target": target.value, "errors": errors})
+            return EXIT_INVALID_STATE
+        state.progress["completion_gate"] = {
+            "validated": True,
+            "timestamp": now_iso(),
+            "task_graph": "synchronized",
+            "live_activity": "recorded",
+        }
+    transition(state, target)
     save_state(state, path)
-    append_event(path.with_name("events.jsonl"), "phase_transition", state.phase, {"target": state.phase.value})
+    append_event(
+        path.with_name("events.jsonl"),
+        "phase_transition",
+        state.phase,
+        {"target": state.phase.value, "workspace_snapshot": snapshot},
+    )
     _json(state.to_dict())
     return EXIT_COMPLETE if state.status is Status.COMPLETE else 0
 
@@ -138,6 +231,175 @@ def cmd_budget_check(args: argparse.Namespace) -> int:
     valid = all(item["allowed"] for item in decisions)
     _json({"valid": valid, "counters": decisions})
     return 0 if valid else EXIT_BUDGET
+
+
+def _formal_budget_stop(root: Path, path: Path, state: Any, exc: ActivityBudgetExhausted) -> int:
+    stop(
+        state,
+        Status.BUDGET_EXHAUSTED,
+        f"Budget exhausted for {exc.counter}",
+        {"counter": exc.counter, "attempted": exc.attempted, "limit": exc.limit},
+    )
+    save_state(state, path)
+    checkpoint_json, checkpoint_md = create_checkpoint(
+        state,
+        path.parent,
+        next_action="Reduce scope or start a new explicitly approved run.",
+        do_not_repeat=[f"Do not exceed {exc.counter} limit {exc.limit} without a new approved run."],
+    )
+    append_event(
+        path.with_name("events.jsonl"),
+        "formal_stop",
+        state.phase,
+        {
+            "status": Status.BUDGET_EXHAUSTED.value,
+            "counter": exc.counter,
+            "attempted": exc.attempted,
+            "limit": exc.limit,
+        },
+    )
+    _json({
+        "status": Status.BUDGET_EXHAUSTED.value,
+        "checkpoint": str(checkpoint_json),
+        "markdown": str(checkpoint_md),
+        "counter": exc.counter,
+        "attempted": exc.attempted,
+        "limit": exc.limit,
+    })
+    return EXIT_BUDGET
+
+
+def cmd_activity_record(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    path, state = _find_state(root, args.run_id)
+    if state.status is not Status.RUNNING:
+        raise ValueError(f"Cannot record activity for terminal run: {state.status.value}")
+    _refresh_project_with_event(root, path, state)
+    try:
+        record = record_activity(
+            state,
+            args.kind,
+            amount=args.amount,
+            task_id=args.task_id,
+            detail=args.detail,
+        )
+    except ActivityBudgetExhausted as exc:
+        return _formal_budget_stop(root, path, state, exc)
+    save_state(state, path)
+    append_event(path.with_name("events.jsonl"), "activity_recorded", state.phase, record)
+    _json({"recorded": True, "activity": record, "budget": state.budget.used})
+    return 0
+
+
+def cmd_task_add(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    _, state = _find_state(root, args.run_id)
+    if state.status is not Status.RUNNING or state.phase is not Phase.TASK_GRAPH:
+        raise ValueError("Tasks may be added only during TASK_GRAPH")
+    task = add_task(
+        root,
+        args.task_id,
+        args.summary,
+        mandatory=not args.optional,
+        acceptance=args.acceptance,
+    )
+    _json({"added": True, "task": task})
+    return 0
+
+
+def cmd_task_start(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    path, state = _find_state(root, args.run_id)
+    if state.status is not Status.RUNNING:
+        raise ValueError(f"Cannot start task for terminal run: {state.status.value}")
+    try:
+        record = record_activity(state, "task-attempt", task_id=args.task_id, detail=args.detail)
+    except ActivityBudgetExhausted as exc:
+        return _formal_budget_stop(root, path, state, exc)
+    attempts = state.progress.get("task_attempts", {})
+    attempt = int(attempts.get(args.task_id, 0)) if isinstance(attempts, dict) else 0
+    task = start_task(root, args.task_id, attempt)
+    save_state(state, path)
+    append_event(path.with_name("events.jsonl"), "task_started", state.phase, {**record, "task": task})
+    _json({"started": True, "task": task, "attempt": attempt})
+    return 0
+
+
+def cmd_task_complete(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    path, state = _find_state(root, args.run_id)
+    if state.status is not Status.RUNNING or state.phase not in {Phase.IMPLEMENTATION, Phase.VERIFICATION}:
+        raise ValueError("Tasks may be completed only during IMPLEMENTATION or VERIFICATION")
+    task = complete_task(root, args.task_id, args.evidence)
+    append_event(
+        path.with_name("events.jsonl"),
+        "task_completed",
+        state.phase,
+        {"task_id": args.task_id, "evidence": task.get("evidence", [])},
+    )
+    _json({"completed": True, "task": task})
+    return 0
+
+
+def cmd_task_block(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    path, state = _find_state(root, args.run_id)
+    if state.status is not Status.RUNNING:
+        raise ValueError(f"Cannot block task for terminal run: {state.status.value}")
+    task = block_task(root, args.task_id, args.reason)
+    append_event(
+        path.with_name("events.jsonl"),
+        "task_blocked",
+        state.phase,
+        {"task_id": args.task_id, "reason": args.reason},
+    )
+    _json({"blocked": True, "task": task})
+    return 0
+
+
+def cmd_task_show(args: argparse.Namespace) -> int:
+    graph = load_task_graph(_root(args.root), required=True)
+    _json(graph)
+    return 0
+
+
+def _skill_version(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    match = re.search(r'^\s*version:\s*["\']?([^"\'\s]+)', path.read_text(encoding="utf-8"), re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+    skill_path = codex_home / "skills" / "stackmarshal" / "SKILL.md"
+    restart_marker = codex_home / ".stackmarshal-restart-required.json"
+    installed = _skill_version(skill_path)
+    host = args.host_skill_version
+    restart_required = host is not None and host != __version__
+    repair_required = installed != __version__
+    restart_pending = restart_marker.is_file()
+    marker_version: str | None = None
+    if restart_pending:
+        try:
+            marker_data = json.loads(restart_marker.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            marker_data = {}
+        if isinstance(marker_data, dict) and isinstance(marker_data.get("version"), str):
+            marker_version = str(marker_data["version"])
+    ready = not restart_required and not repair_required and not restart_pending
+    _json({
+        "ready": ready,
+        "cli_version": __version__,
+        "installed_skill_version": installed,
+        "host_skill_version": host,
+        "restart_required": restart_required or restart_pending,
+        "restart_pending": restart_pending,
+        "restart_marker_version": marker_version,
+        "repair_required": repair_required,
+        "skill_path": str(skill_path),
+    })
+    return 0 if ready else EXIT_INVALID_STATE
 
 
 def _read_json(path: str) -> dict[str, Any]:
@@ -309,6 +571,56 @@ def build_parser() -> argparse.ArgumentParser:
     budget_check.add_argument("--run-id")
     budget_check.set_defaults(func=cmd_budget_check)
 
+    activity = sub.add_parser("activity")
+    activity_sub = activity.add_subparsers(dest="activity_command", required=True)
+    activity_record = activity_sub.add_parser("record")
+    activity_record.add_argument(
+        "kind",
+        choices=[
+            "tool-call",
+            "implementation",
+            "verification",
+            "task-attempt",
+            "research-round",
+            "architecture-replan",
+            "failure-repeat",
+            "stagnation-cycle",
+            "scope-addition",
+        ],
+    )
+    activity_record.add_argument("--run-id")
+    activity_record.add_argument("--amount", type=int, default=1)
+    activity_record.add_argument("--task-id")
+    activity_record.add_argument("--detail")
+    activity_record.set_defaults(func=cmd_activity_record)
+
+    task = sub.add_parser("task")
+    task_sub = task.add_subparsers(dest="task_command", required=True)
+    task_add = task_sub.add_parser("add")
+    task_add.add_argument("task_id")
+    task_add.add_argument("--run-id")
+    task_add.add_argument("--summary", required=True)
+    task_add.add_argument("--acceptance", action="append", default=[])
+    task_add.add_argument("--optional", action="store_true")
+    task_add.set_defaults(func=cmd_task_add)
+    task_start = task_sub.add_parser("start")
+    task_start.add_argument("task_id")
+    task_start.add_argument("--run-id")
+    task_start.add_argument("--detail")
+    task_start.set_defaults(func=cmd_task_start)
+    task_complete = task_sub.add_parser("complete")
+    task_complete.add_argument("task_id")
+    task_complete.add_argument("--run-id")
+    task_complete.add_argument("--evidence", action="append", default=[])
+    task_complete.set_defaults(func=cmd_task_complete)
+    task_block = task_sub.add_parser("block")
+    task_block.add_argument("task_id")
+    task_block.add_argument("--run-id")
+    task_block.add_argument("--reason", required=True)
+    task_block.set_defaults(func=cmd_task_block)
+    task_show = task_sub.add_parser("show")
+    task_show.set_defaults(func=cmd_task_show)
+
     candidate = sub.add_parser("candidate")
     candidate_sub = candidate.add_subparsers(dest="candidate_command", required=True)
     candidate_score = candidate_sub.add_parser("score")
@@ -351,7 +663,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate = sub.add_parser("validate")
     validate.add_argument("file")
-    validate.add_argument("--kind", choices=["run-state", "candidate", "capability-map", "checkpoint"], default="run-state")
+    validate.add_argument(
+        "--kind",
+        choices=["run-state", "candidate", "capability-map", "task-graph", "checkpoint"],
+        default="run-state",
+    )
     validate.set_defaults(func=cmd_validate)
 
     stop_parser = sub.add_parser("stop")
@@ -373,6 +689,10 @@ def build_parser() -> argparse.ArgumentParser:
     invocation = sub.add_parser("invocation")
     invocation.add_argument("text")
     invocation.set_defaults(func=cmd_invocation)
+
+    doctor = sub.add_parser("doctor")
+    doctor.add_argument("--host-skill-version")
+    doctor.set_defaults(func=cmd_doctor)
     return parser
 
 

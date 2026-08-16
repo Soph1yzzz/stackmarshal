@@ -100,7 +100,21 @@ def test_cli_full_transition_report_and_terminal_guard(
 ) -> None:
     root = tmp_path / "project"
     root.mkdir()
-    run_id = _init_and_start(root, capsys)
+    _call(capsys, ["--root", str(root), "init"])
+    code, started = _call(
+        capsys,
+        [
+            "--root",
+            str(root),
+            "start",
+            "--invocation",
+            "$stackmarshal prepare",
+            "--mode",
+            "prepare",
+        ],
+    )
+    assert code == 0
+    run_id = str(started["run_id"])
     path = root / ".stackmarshal" / "runs" / run_id / "run.json"
     phases = [
         Phase.INTENT_NORMALIZATION,

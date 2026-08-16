@@ -8,7 +8,7 @@ description: >
   "使用 StackMarshal 实现", or "$stackmarshal". Do not use for ordinary coding
   requests, explanations, comparisons, or text edits that merely mention the name.
 metadata:
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # StackMarshal
@@ -18,14 +18,23 @@ convergence: either `COMPLETE` with evidence or a formal, resumable stop.
 
 ## 1. Invocation gate
 
-Before any work, verify both conditions:
+Before any work, verify host readiness and invocation in this order:
 
-1. The exact brand `StackMarshal` (case-insensitive) or `$stackmarshal` is present.
-2. The user identifies it as the mechanism to use, not merely a topic or edit target.
+1. Run `python scripts/stackmarshal_core.py host-ready --version "1.1.1"`.
+   The installer leaves a restart-pending marker outside the Skill directory. Only a
+   matching newly loaded Skill may acknowledge and clear it. If this command reports
+   `ready: false`, stop with `INVALID_STATE` and require a Codex restart.
+2. Verify that the exact brand `StackMarshal` (case-insensitive) or `$stackmarshal`
+   is present and that the user identifies it as the mechanism to use, not merely a
+   topic or edit target.
+3. Run `python scripts/stackmarshal_core.py invocation "<user text>"`. When the result
+   is not triggered, stop this skill and answer normally. A stale pre-restart Skill
+   still invokes the replaced on-disk fallback; while the marker exists, that fallback
+   refuses invocation with `restart_required` instead of silently emulating the new Skill.
+4. Run `stackmarshal doctor --host-skill-version "1.1.1"` before project work. A Skill,
+   CLI, or host-version mismatch is `INVALID_STATE`.
 
-Run `python scripts/stackmarshal_core.py invocation "<user text>"`. When the result
-is not triggered, stop this skill and answer normally. Never infer invocation from
-an ordinary coding request. Never invoke StackMarshal recursively.
+Never infer invocation from an ordinary coding request. Never invoke StackMarshal recursively.
 
 ## 2. Mode inference
 
@@ -42,9 +51,17 @@ Explicit `$stackmarshal research|prepare|build|resume` wins.
 
 Read project `AGENTS.md`, `README`, manifests, Git status, tests, CI, installed
 Skills, MCP configuration, plugins, and available GitHub integration. Preserve
-existing dirty state. Create `.stackmarshal/project/` and one run directory.
+existing dirty state. Run `stackmarshal init`, then create exactly one authoritative
+run with `stackmarshal start`. Reuse that run ID until it reaches a terminal state;
+never create a replacement run merely because Git is initialized or the workspace
+identity gains repository lineage. StackMarshal deliberately ignores an ancestor
+Git repository as ownership of a nested requested workspace and records allowed
+child-repository bootstrap/first-commit identity migrations in the same run.
+
 Record requirements, mandatory acceptance criteria, constraints, non-goals,
-unresolved assumptions, risk class, budget profile, and event log.
+unresolved assumptions, risk class, budget profile, and event log. Enter every phase
+with `stackmarshal state transition <PHASE> --run-id <id>` before doing that phase's
+work. Do not replay transitions retrospectively after the work already happened.
 
 Read `references/workflow.md` and `references/stop-policy.md`.
 
@@ -96,19 +113,31 @@ failed capability PoC, disproven premise, critical security issue, or license co
 Record every post-freeze change as a decision.
 
 Create dependency-aware tasks with acceptance links, scope, attempts, status, and
-verification command. Research mode ends after the architecture report. Prepare
-mode ends after the task graph.
+verification command using `stackmarshal task add`. The canonical task state is
+`.stackmarshal/project/task-graph.json`; the Markdown task graph is a generated human
+view. Research mode ends after the architecture report. Prepare mode ends after the
+task graph.
 
 ## 8. Build and verify
 
-In build mode, let Codex implement tasks within per-task limits. Each cycle must
-improve at least one observable measure: accepted criteria, passing tests, fewer
-unfinished tasks/blockers, lower uncertainty, a concrete root cause, or a safe
-fallback. Do not switch tools to avoid root-cause analysis.
+In build mode, transition to `IMPLEMENTATION` before modifying the deliverable.
+Use `stackmarshal task start` before each task attempt and `stackmarshal task complete`
+with concrete evidence when it passes. Before a bounded host-tool batch, reserve the
+observable activity with `stackmarshal activity record tool-call --amount <N>`; record
+research rounds, replans, repeated failures, and stagnation cycles through the same
+activity ledger. Record at least one live `implementation` activity while still in
+`IMPLEMENTATION`.
 
-Verify build, lint, type checking, unit, integration, E2E where applicable,
-security checks, and every mandatory acceptance criterion. An unresolved mandatory
-criterion forbids `COMPLETE`.
+Each cycle must improve at least one observable measure: accepted criteria, passing
+tests, fewer unfinished tasks/blockers, lower uncertainty, a concrete root cause, or
+a safe fallback. Do not switch tools to avoid root-cause analysis.
+
+Transition to `VERIFICATION` before quality gates and record live `verification`
+activity. Verify build, lint, type checking, unit, integration, E2E where applicable,
+security checks, and every mandatory acceptance criterion. Complete verification tasks
+with evidence. `VERIFICATION -> COMPLETE` is rejected when mandatory tasks are stale,
+live implementation/verification activity is missing, the observable tool budget was
+untouched, or implementation-boundary workspace snapshots show no material change.
 
 ## 9. Stop harness
 
