@@ -75,11 +75,11 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 再現性のためversionを固定する場合：
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.1/install.ps1))) -Version v1.1.1
+& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.2/install.ps1))) -Version v1.1.2
 ```
 
 ```bash
-curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.1/install.sh | bash -s -- --version v1.1.1
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.2/install.sh | bash -s -- --version v1.1.2
 ```
 
 GitとPython 3.11以上が前提です。未導入の場合は、検出結果を説明した上でOS package managerを
@@ -88,14 +88,14 @@ GitとPython 3.11以上が前提です。未導入の場合は、検出結果を
 使用してください。downgradeは`-AllowDowngrade` / `--allow-downgrade`を明示しない限り拒否します。
 
 CLIのRuntime必須依存は**ゼロ**で、現在のPython環境やglobal Pythonへは導入しません。
-Skill導入・更新後はCodexを再起動してください。v1.1.1ではCodex homeのSkill外にも
+Skill導入・更新後はCodexを再起動してください。installerはCodex homeのSkill外にも
 restart-pending markerを残します。再起動前の古いSkillはStackMarshal起動を拒否し、
 再起動後に同versionの新しいSkillだけがmarkerを確認・解除してから作業を開始します。
 
 Skillだけを手動導入する場合も、`main`ではなく対応するRelease tagへ固定します。
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.1/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.2/skills/stackmarshal
 ```
 
 ## CLI例
@@ -105,7 +105,7 @@ stackmarshal init
 stackmarshal invocation "StackMarshalを使って実装して"
 stackmarshal start --mode build --budget standard \
   --invocation "StackMarshalを使って実装して"
-stackmarshal doctor --host-skill-version 1.1.1
+stackmarshal doctor --host-skill-version 1.1.2
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -113,6 +113,8 @@ stackmarshal activity record tool-call --amount 2 --detail "bounded host-tool ba
 stackmarshal task add implement --summary "機能を実装" --acceptance "tests pass"
 stackmarshal task start implement
 stackmarshal task complete implement --evidence "tests/test_feature.py passed"
+stackmarshal finalize
+stackmarshal state transition COMPLETE
 stackmarshal candidate score candidate.json
 stackmarshal failure fingerprint failure.json
 stackmarshal progress evaluate current.json --previous previous.json
@@ -183,7 +185,21 @@ coverage run -m pytest
 coverage report --fail-under=85
 python -m build
 python -m twine check dist/*
+python scripts/version_contract.py --check
+python scripts/release_gate.py --stage candidate
 ```
+
+Release versionのauthorityは`pyproject.toml [project].version`です。意図的にversionを
+bumpした後は`python scripts/version_contract.py --sync`で現在versionのmirrorだけを同期します。
+Core / Skill / living documentationに同期漏れがあればCIとrelease builderはfail-closeします。
+候補をcommitしてworktreeがcleanになった後は`python scripts/release_gate.py --stage immutable`で
+決定論的Release buildとplatform bootstrap installer smokeまで一括検証します。このsmokeは必須で
+skipできません。制限されたlocal hostがPowerShell/Bashを起動できない場合は
+`python scripts/smoke_installer.py --direct-installer`で共有installer経路を診断できますが、これは
+immutable bootstrap gateの代替ではありません。公開後の
+`--stage published --release-dir <downloaded-assets>`は、期待asset set、checksum、component version、
+manifest/provenanceのHEAD束縛、local release tagを検証します。bundle内のchecksumだけを真正性のrootとは
+扱わず、Release契約上はGitHub側で記録されたasset digestも独立に確認します。
 
 CIはUbuntu、macOS、WindowsでPython 3.11〜3.13を検証します。Windows 11互換は
 v1の必須Release Gateです。

@@ -16,6 +16,11 @@ import tarfile
 import tomllib
 import zipfile
 
+try:
+    from version_contract import check_version_contract
+except ModuleNotFoundError:  # imported by tests as scripts.build_release
+    from scripts.version_contract import check_version_contract
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -201,6 +206,9 @@ def main() -> int:
     args = parser.parse_args()
 
     version = resolve_release_version(args.version)
+    version_contract = check_version_contract(ROOT)
+    if not version_contract["coherent"]:
+        raise SystemExit(f"Version contract failed: {version_contract['errors']}")
     if not args.allow_dirty and git("status", "--porcelain"):
         raise SystemExit("Refusing to build a release from a dirty Git worktree")
 
@@ -270,6 +278,11 @@ def main() -> int:
         "version": version,
         "git_head": git_head,
         "source_date_epoch": epoch,
+        "version_coherence": {
+            "authority": version_contract["authority"],
+            "coherent": True,
+            "components": version_contract["components"],
+        },
         "artifacts": [
             {"name": path.name, "sha256": sha256(path), "size": path.stat().st_size}
             for path in initial_artifacts

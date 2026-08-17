@@ -1,6 +1,9 @@
-# Forward Test Report
+# v1.1.0 Forward Test Report (Historical Evidence)
 
 Date: 2026-08-05
+
+This document is immutable historical evidence for the v1.1.0 release line. Current release
+requirements and thresholds live in `docs/RELEASE_CHECKLIST.md`.
 
 ## Automated host-independent coverage
 

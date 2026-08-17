@@ -236,6 +236,12 @@ def test_live_build_consumes_budget_syncs_tasks_and_completes(
     )
     assert code == 0
 
+    code, finalized = _call(
+        capsys,
+        ["--root", str(root), "finalize", "--run-id", run_id],
+    )
+    assert code == 0 and finalized["finalized"] is True
+
     code, payload = _call(
         capsys,
         ["--root", str(root), "state", "transition", Phase.COMPLETE.value, "--run-id", run_id],
@@ -247,6 +253,9 @@ def test_live_build_consumes_budget_syncs_tasks_and_completes(
     assert state.budget.used["tool_calls"] == 5
     assert state.budget.used["attempts_per_task"] == 1
     assert state.progress["completion_gate"]["validated"] is True
+    assert state.progress["completion_gate"]["finalization"] == "sealed"
+    assert state.progress["terminal_seal"]["workspace_fingerprint"]
+    assert state.progress["finalization"]["files"]["environment-audit.json"]
     snapshots = state.progress["phase_snapshots"]
     assert snapshots["IMPLEMENTATION"]["workspace_fingerprint"] != snapshots["VERIFICATION"]["workspace_fingerprint"]
     graph = load_task_graph(root, required=True)
@@ -287,6 +296,7 @@ def test_complete_rejects_replayed_or_stale_build(tmp_path: Path, capsys: pytest
     assert "missing_live_verification_activity" in errors
     assert "untouched_tool_call_budget" in errors
     assert "no_workspace_change_during_implementation" in errors
+    assert "missing_finalization" in errors
 
 
 def test_activity_budget_exhaustion_formally_stops_and_checkpoints(

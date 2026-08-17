@@ -2,6 +2,34 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
+## [Unreleased]
+
+### Added
+
+- v1.1.2 release-version contract with `pyproject.toml` as authority and fail-closed Core/Skill/docs coherence checks.
+- Staged candidate/immutable/published release gate with machine-readable evidence.
+- Explicit VERIFICATION finalization and non-mutating terminal repository seal before COMPLETE.
+- Permanent nested-workspace live-orchestration E2E regression contract.
+
+### Changed
+
+- Release manifests include component version-coherence evidence.
+- Living release checklist uses stable gate requirements instead of stale release-specific counts.
+- Future work now lives at the repository-contract path `docs/FUTURE_WORK.md`.
+
+## [1.1.1] - 2026-08-16
+
+### Added
+
+- One authoritative live run across nested-repository bootstrap and first-commit lineage migration.
+- Core-owned live activity/budget accounting and canonical task graph with evidence-gated COMPLETE.
+- Versioned restart-pending marker and stale-host readiness refusal after Skill update.
+
+### Changed
+
+- Live phase snapshots distinguish real orchestration from retrospective transition replay.
+- COMPLETE fails closed on stale mandatory tasks, missing live activity, untouched tool budgets, and missing implementation change evidence.
+
 ## [1.1.0] - 2026-08-05
 
 ### Added

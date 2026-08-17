@@ -19,6 +19,8 @@ boundaries.
 - Prompt injection: evidence-only handling and no candidate orchestration authority.
 - Malicious/typosquatted dependency: canonical source, score, license, pin, hash, PoC.
 - Installer/bootstrap substitution: versioned GitHub Release URLs, strict SHA256SUMS parsing, verified shared installer and payloads, dedicated venv, `--no-index --no-deps`, and post-install doctor.
+- Release evidence substitution or path escape: flat expected asset-set enforcement, checksum target containment/symlink/duplicate rejection, manifest artifact hash/size checks, component-version coherence, clean provenance, and manifest/provenance binding to the expected immutable Git HEAD.
+- Release-version drift: `pyproject.toml` is authoritative; CI/release gates fail closed when Core, Skill, smoke resolution, Skill readiness commands, or living documentation diverge.
 - Installer archive escape: regular-file-only Skill extraction, canonical path containment, duplicate rejection, and symlink rejection.
 - Interrupted update or repair: staged directory swaps, launcher/state snapshots, rollback before commit, and bounded cleanup after success.
 - Silent global mutation: explicit approval for missing Git/Python/venv installation, PATH changes, modified Skill replacement, and downgrade.
@@ -27,7 +29,7 @@ boundaries.
 - Workspace escape/destructive writes: strict run-id grammar, resolved-path containment, receipt-bound file rollback, and dirty-state capture.
 - Infinite loops: immutable budgets, progress tests, failure fingerprints, replan caps.
 - Forged resume state: schema validation, user-local HMAC signature, repository-lineage identity, exact tracked/staged/untracked worktree fingerprint, strict HEAD and dirty-state checks, and lock verification.
-- False completion: mandatory acceptance evidence required for `COMPLETE`.
+- False completion: mandatory acceptance evidence required for `COMPLETE`, final verification is bound to a terminal deliverable fingerprint, finalization seals StackMarshal-owned bookkeeping before terminal transition, and post-finalization deliverable/build/release mutations invalidate `COMPLETE`.
 - Runtime self expansion: no runtime self-update, self-rewrite, recursive invocation, or delegated control. Version installation and update are handled by the separate, versioned bootstrap/installer boundary.
 
 ## Residual risk

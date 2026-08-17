@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import partial
@@ -7,6 +8,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import tomllib
 import shutil
 import subprocess
 import sys
@@ -14,7 +16,14 @@ import tempfile
 from threading import Thread
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "1.1.1"
+
+
+def project_version() -> str:
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        return str(tomllib.load(handle)["project"]["version"])
+
+
+VERSION = project_version()
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -58,7 +67,14 @@ def launcher_path(install_root: Path) -> Path:
     return install_root / "bin" / ("stackmarshal.cmd" if os.name == "nt" else "stackmarshal")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Smoke-test StackMarshal release installation")
+    parser.add_argument(
+        "--direct-installer",
+        action="store_true",
+        help="Exercise the shared installer directly when the host cannot spawn the platform bootstrap shell",
+    )
+    args = parser.parse_args(argv)
     release = ROOT / "release"
     required = [
         release / "SHA256SUMS",
@@ -80,7 +96,10 @@ def main() -> int:
         install_root = root / "app"
         codex_home = root / "codex"
         with release_server(server_root) as base_url:
-            result = _run_bootstrap(base_url, install_root, codex_home, release)
+            if args.direct_installer:
+                result = _run_direct_installer(base_url, install_root, codex_home, release)
+            else:
+                result = _run_bootstrap(base_url, install_root, codex_home, release)
 
         if '"installed": true' not in result.stdout:
             raise RuntimeError(f"Installer did not report success:\n{result.stdout}")
@@ -116,6 +135,31 @@ def main() -> int:
         f"using Python {state['cli']['python']['version']}"
     )
     return 0
+
+
+def _run_direct_installer(
+    base_url: str,
+    install_root: Path,
+    codex_home: Path,
+    release: Path,
+) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    environment.update({"NO_PROXY": "127.0.0.1,localhost", "no_proxy": "127.0.0.1,localhost"})
+    command = [
+        sys.executable,
+        str(release / "installer.py"),
+        "--version",
+        VERSION,
+        "--release-base-url",
+        f"{base_url}/v{VERSION}",
+        "--install-root",
+        str(install_root),
+        "--codex-home",
+        str(codex_home),
+        "--yes",
+        "--no-path",
+    ]
+    return run(command, environment=environment)
 
 
 def _run_bootstrap(base_url: str, install_root: Path, codex_home: Path, release: Path) -> subprocess.CompletedProcess[str]:

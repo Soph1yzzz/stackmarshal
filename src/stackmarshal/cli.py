@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable
 from dataclasses import asdict
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -31,6 +32,8 @@ from .state import (
     refresh_project_info,
     save_state,
     stop,
+    terminal_repository_snapshot,
+    terminal_workspace_fingerprint,
     transition,
     validate_invocation,
     validate_run_id,
@@ -42,6 +45,7 @@ from .taskgraph import (
     complete_task,
     completion_errors as task_completion_errors,
     load_task_graph,
+    save_task_graph,
     start_task,
 )
 from .validation import validate_json_file
@@ -112,7 +116,61 @@ def _record_phase_snapshot(state: Any, root: Path, target: Phase) -> dict[str, A
     return snapshot
 
 
-def _completion_gate_errors(root: Path, state: Any) -> list[str]:
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _finalization_files(root: Path) -> dict[str, Path]:
+    project = root / STATE_DIR / "project"
+    required = {
+        "task-graph.json": project / "task-graph.json",
+        "task-graph.md": project / "task-graph.md",
+        "environment-audit.json": project / "environment-audit.json",
+    }
+    missing = [name for name, path in required.items() if not path.is_file() or path.is_symlink()]
+    if missing:
+        raise ValueError(f"Finalization files are missing or unsafe: {', '.join(missing)}")
+    files: dict[str, Path] = {}
+    for path in sorted(project.rglob("*"), key=lambda item: item.as_posix()):
+        if path.is_symlink():
+            raise ValueError(f"Finalization project evidence may not be a symlink: {path.relative_to(project)}")
+        if path.is_file():
+            files[path.relative_to(project).as_posix()] = path
+    return files
+
+
+def _finalization_snapshot(root: Path) -> dict[str, Any]:
+    files = _finalization_files(root)
+    return {
+        "timestamp": now_iso(),
+        "workspace_fingerprint": terminal_workspace_fingerprint(root),
+        "files": {name: _sha256_file(path) for name, path in files.items()},
+    }
+
+
+def _finalization_errors(root: Path, state: Any) -> list[str]:
+    finalization = state.progress.get("finalization")
+    if not isinstance(finalization, dict):
+        return ["missing_finalization"]
+    errors: list[str] = []
+    if finalization.get("workspace_fingerprint") != terminal_workspace_fingerprint(root):
+        errors.append("workspace_changed_after_finalization")
+    recorded = finalization.get("files")
+    if not isinstance(recorded, dict):
+        return [*errors, "invalid_finalization_file_hashes"]
+    try:
+        current_files = _finalization_files(root)
+    except ValueError as exc:
+        return [*errors, f"unsafe_finalization_project_evidence:{exc}"]
+    if set(recorded) != set(current_files):
+        errors.append("finalization_file_set_changed")
+    for name, path in current_files.items():
+        if recorded.get(name) != _sha256_file(path):
+            errors.append(f"finalization_file_changed:{name}")
+    return errors
+
+
+def _completion_gate_errors(root: Path, state: Any, *, require_finalization: bool = True) -> list[str]:
     require_graph = state.mode is Mode.BUILD and int(state.progress.get("live_contract_version", 0)) >= 1
     errors = task_completion_errors(root, require_graph=require_graph)
     errors.extend(completion_activity_errors(state))
@@ -127,6 +185,13 @@ def _completion_gate_errors(root: Path, state: Any) -> list[str]:
                 errors.append("missing_live_phase_snapshots")
             elif implementation.get("workspace_fingerprint") == verification.get("workspace_fingerprint"):
                 errors.append("no_workspace_change_during_implementation")
+        verified_workspace = state.progress.get("verified_workspace")
+        if not isinstance(verified_workspace, dict):
+            errors.append("missing_verified_workspace_fingerprint")
+        elif verified_workspace.get("workspace_fingerprint") != terminal_workspace_fingerprint(root):
+            errors.append("workspace_changed_after_verification")
+        if require_finalization:
+            errors.extend(_finalization_errors(root, state))
     return errors
 
 
@@ -201,18 +266,24 @@ def cmd_state_transition(args: argparse.Namespace) -> int:
     path, state = _find_state(root, args.run_id)
     _refresh_project_with_event(root, path, state)
     target = Phase(args.phase)
-    snapshot = _record_phase_snapshot(state, root, target)
     if target is Phase.COMPLETE:
         errors = _completion_gate_errors(root, state)
         if errors:
             _json({"transitioned": False, "target": target.value, "errors": errors})
             return EXIT_INVALID_STATE
+        terminal_seal = terminal_repository_snapshot(root)
+        state.progress["terminal_seal"] = terminal_seal
+        snapshot = _record_phase_snapshot(state, root, target)
         state.progress["completion_gate"] = {
             "validated": True,
             "timestamp": now_iso(),
             "task_graph": "synchronized",
             "live_activity": "recorded",
+            "finalization": "sealed",
+            "terminal_seal": terminal_seal,
         }
+    else:
+        snapshot = _record_phase_snapshot(state, root, target)
     transition(state, target)
     save_state(state, path)
     append_event(
@@ -285,6 +356,13 @@ def cmd_activity_record(args: argparse.Namespace) -> int:
         )
     except ActivityBudgetExhausted as exc:
         return _formal_budget_stop(root, path, state, exc)
+    if args.kind == "verification":
+        verified_workspace = {
+            "timestamp": now_iso(),
+            "workspace_fingerprint": terminal_workspace_fingerprint(root),
+        }
+        state.progress["verified_workspace"] = verified_workspace
+        record["workspace_fingerprint"] = verified_workspace["workspace_fingerprint"]
     save_state(state, path)
     append_event(path.with_name("events.jsonl"), "activity_recorded", state.phase, record)
     _json({"recorded": True, "activity": record, "budget": state.budget.used})
@@ -465,6 +543,39 @@ def cmd_audit(args: argparse.Namespace) -> int:
     output = Path(args.output) if args.output else root / STATE_DIR / "project" / "environment-audit.json"
     CodexAdapter(root).write_audit(output)
     _json({"written": str(output)})
+    return 0
+
+
+def cmd_finalize(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    path, state = _find_state(root, args.run_id)
+    if state.status is not Status.RUNNING or state.phase is not Phase.VERIFICATION:
+        _json({
+            "finalized": False,
+            "reason": "finalization_requires_running_verification",
+            "status": state.status.value,
+            "phase": state.phase.value,
+        })
+        return EXIT_INVALID_STATE
+    _refresh_project_with_event(root, path, state)
+    errors = _completion_gate_errors(root, state, require_finalization=False)
+    if errors:
+        _json({"finalized": False, "errors": errors})
+        return EXIT_INVALID_STATE
+    graph = load_task_graph(root, required=True)
+    save_task_graph(root, graph)
+    CodexAdapter(root).write_audit(root / STATE_DIR / "project" / "environment-audit.json")
+    _refresh_project_with_event(root, path, state)
+    finalization = _finalization_snapshot(root)
+    state.progress["finalization"] = finalization
+    save_state(state, path)
+    append_event(
+        path.with_name("events.jsonl"),
+        "finalization_completed",
+        state.phase,
+        finalization,
+    )
+    _json({"finalized": True, "run_id": state.run_id, "finalization": finalization})
     return 0
 
 
@@ -685,6 +796,10 @@ def build_parser() -> argparse.ArgumentParser:
     audit = sub.add_parser("audit")
     audit.add_argument("--output")
     audit.set_defaults(func=cmd_audit)
+
+    finalize = sub.add_parser("finalize")
+    finalize.add_argument("--run-id")
+    finalize.set_defaults(func=cmd_finalize)
 
     invocation = sub.add_parser("invocation")
     invocation.add_argument("text")

@@ -8,7 +8,7 @@ description: >
   "使用 StackMarshal 实现", or "$stackmarshal". Do not use for ordinary coding
   requests, explanations, comparisons, or text edits that merely mention the name.
 metadata:
-  version: "1.1.1"
+  version: "1.1.2"
 ---
 
 # StackMarshal
@@ -20,7 +20,7 @@ convergence: either `COMPLETE` with evidence or a formal, resumable stop.
 
 Before any work, verify host readiness and invocation in this order:
 
-1. Run `python scripts/stackmarshal_core.py host-ready --version "1.1.1"`.
+1. Run `python scripts/stackmarshal_core.py host-ready --version "1.1.2"`.
    The installer leaves a restart-pending marker outside the Skill directory. Only a
    matching newly loaded Skill may acknowledge and clear it. If this command reports
    `ready: false`, stop with `INVALID_STATE` and require a Codex restart.
@@ -31,7 +31,7 @@ Before any work, verify host readiness and invocation in this order:
    is not triggered, stop this skill and answer normally. A stale pre-restart Skill
    still invokes the replaced on-disk fallback; while the marker exists, that fallback
    refuses invocation with `restart_required` instead of silently emulating the new Skill.
-4. Run `stackmarshal doctor --host-skill-version "1.1.1"` before project work. A Skill,
+4. Run `stackmarshal doctor --host-skill-version "1.1.2"` before project work. A Skill,
    CLI, or host-version mismatch is `INVALID_STATE`.
 
 Never infer invocation from an ordinary coding request. Never invoke StackMarshal recursively.
@@ -132,12 +132,24 @@ Each cycle must improve at least one observable measure: accepted criteria, pass
 tests, fewer unfinished tasks/blockers, lower uncertainty, a concrete root cause, or
 a safe fallback. Do not switch tools to avoid root-cause analysis.
 
-Transition to `VERIFICATION` before quality gates and record live `verification`
-activity. Verify build, lint, type checking, unit, integration, E2E where applicable,
-security checks, and every mandatory acceptance criterion. Complete verification tasks
-with evidence. `VERIFICATION -> COMPLETE` is rejected when mandatory tasks are stale,
+Transition to `VERIFICATION` before quality gates. Verify build, lint, type checking,
+unit, integration, E2E where applicable, security checks, and every mandatory acceptance
+criterion. Complete verification tasks with evidence, then record a live `verification`
+activity after the final verification command so the Core binds that evidence boundary to
+the terminal workspace fingerprint. `VERIFICATION -> COMPLETE` is rejected when mandatory tasks are stale,
 live implementation/verification activity is missing, the observable tool budget was
 untouched, or implementation-boundary workspace snapshots show no material change.
+After verification evidence is complete, run `stackmarshal finalize --run-id <id>`.
+Finalization requires that the deliverable still matches the last recorded verification
+fingerprint, then regenerates the task view and final environment audit and seals the complete
+`.stackmarshal/project/` evidence tree plus the terminal deliverable fingerprint while the run
+is still in `VERIFICATION`.
+Perform any permitted Git housekeeping after finalization and before COMPLETE; a Git-only
+commit does not invalidate the content seal. `state transition COMPLETE` then refuses
+changed deliverables/bookkeeping and records the final Git HEAD, dirty paths, status
+porcelain, and workspace fingerprint without mutating project content. After StackMarshal
+returns a terminal result, do not mutate project files or create Git commits unless the
+user explicitly requests a separate post-run action.
 
 ## 9. Stop harness
 

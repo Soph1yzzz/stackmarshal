@@ -61,28 +61,9 @@ def _run_git_bytes(root: Path, *args: str) -> bytes:
     return result.stdout
 
 
-def workspace_fingerprint(root: Path) -> str:
-    """Hash workspace contents while excluding VCS/runtime/build noise.
-
-    This fingerprint exists to prove that implementation work happened between
-    recorded phase boundaries, including before a new repository has a first commit.
-    """
-
+def _tree_fingerprint(root: Path, ignored_dirs: set[str]) -> str:
     resolved = root.resolve()
     digest = hashlib.sha256()
-    ignored_dirs = {
-        ".git",
-        ".stackmarshal",
-        ".venv",
-        "venv",
-        "__pycache__",
-        ".pytest_cache",
-        ".mypy_cache",
-        ".ruff_cache",
-        "build",
-        "dist",
-        "node_modules",
-    }
     for candidate in sorted(resolved.rglob("*"), key=lambda item: item.as_posix()):
         try:
             relative = candidate.relative_to(resolved)
@@ -104,6 +85,73 @@ def workspace_fingerprint(root: Path) -> str:
             digest.update(b"dir\0")
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def workspace_fingerprint(root: Path) -> str:
+    """Hash source workspace contents while excluding VCS/runtime/build noise.
+
+    This fingerprint exists to prove that implementation work happened between
+    recorded phase boundaries, including before a new repository has a first commit.
+    """
+
+    return _tree_fingerprint(
+        root,
+        {
+            ".git",
+            ".stackmarshal",
+            ".venv",
+            "venv",
+            "__pycache__",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".ruff_cache",
+            "build",
+            "dist",
+            "node_modules",
+        },
+    )
+
+
+def terminal_workspace_fingerprint(root: Path) -> str:
+    """Hash terminal deliverable content, including build/dist/release artifacts."""
+
+    return _tree_fingerprint(
+        root,
+        {
+            ".git",
+            ".stackmarshal",
+            ".venv",
+            "venv",
+            "__pycache__",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".ruff_cache",
+            "node_modules",
+        },
+    )
+
+
+def terminal_repository_snapshot(root: Path) -> dict[str, Any]:
+    """Capture final repository/workspace evidence immediately before COMPLETE."""
+    head = _run_git(root, "rev-parse", "HEAD")
+    toplevel = _run_git(root, "rev-parse", "--show-toplevel")
+    status = _run_git(root, "status", "--porcelain")
+    entries = [] if status is None or not status else status.splitlines()
+    dirty_paths: list[str] = []
+    for entry in entries:
+        path = entry[3:] if len(entry) > 3 else entry
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1]
+        dirty_paths.append(path)
+    return {
+        "timestamp": now_iso(),
+        "git_head": head,
+        "git_toplevel": toplevel,
+        "git_dirty": bool(entries),
+        "git_dirty_paths": dirty_paths,
+        "git_status_porcelain": entries,
+        "workspace_fingerprint": terminal_workspace_fingerprint(root),
+    }
 
 
 def worktree_fingerprint(root: Path) -> str | None:

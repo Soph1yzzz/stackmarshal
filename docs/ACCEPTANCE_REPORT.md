@@ -1,4 +1,8 @@
-# StackMarshal v1.1 Acceptance Report
+# StackMarshal v1.1.0 Acceptance Report (Historical Evidence)
+
+This document records the v1.1.0 acceptance state and is intentionally not updated with
+later release counts, coverage, commits, or assets. Current release requirements live in
+`docs/RELEASE_CHECKLIST.md`.
 
 ## Invocation
 

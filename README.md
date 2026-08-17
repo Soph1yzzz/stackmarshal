@@ -77,11 +77,11 @@ Run the same command again to update to the latest stable release or repair the 
 version. Pin a reproducible version when required:
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.1/install.ps1))) -Version v1.1.1
+& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.2/install.ps1))) -Version v1.1.2
 ```
 
 ```bash
-curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.1/install.sh | bash -s -- --version v1.1.1
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.2/install.sh | bash -s -- --version v1.1.2
 ```
 
 Git and Python 3.11 or newer are prerequisites. When either is missing, the bootstrap explains
@@ -91,7 +91,7 @@ PowerShell or `--yes` on Bash only for a deliberately non-interactive installati
 remain blocked unless `-AllowDowngrade` / `--allow-downgrade` is supplied explicitly.
 
 The CLI has **zero required runtime dependencies**. It is not installed into the active/global
-Python environment. Restart Codex after installing or updating the Skill. v1.1.1 also leaves a
+Python environment. Restart Codex after installing or updating the Skill. The installer also leaves a
 restart-pending marker in the Codex home outside the Skill directory: a stale pre-restart Skill
 will refuse StackMarshal invocation, and the matching newly loaded Skill acknowledges the marker
 after restart before work can begin.
@@ -99,7 +99,7 @@ after restart before work can begin.
 For a Skill-only manual installation, use the matching release tag:
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.1/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.2/skills/stackmarshal
 ```
 
 ## Quick CLI tour
@@ -109,7 +109,7 @@ stackmarshal init
 stackmarshal invocation "Use StackMarshal to build this"
 stackmarshal start --mode build --budget standard \
   --invocation "Use StackMarshal to build this"
-stackmarshal doctor --host-skill-version 1.1.1
+stackmarshal doctor --host-skill-version 1.1.2
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -117,6 +117,8 @@ stackmarshal activity record tool-call --amount 2 --detail "bounded host-tool ba
 stackmarshal task add implement --summary "Implement the feature" --acceptance "tests pass"
 stackmarshal task start implement
 stackmarshal task complete implement --evidence "tests/test_feature.py passed"
+stackmarshal finalize
+stackmarshal state transition COMPLETE
 stackmarshal candidate score candidate.json
 stackmarshal failure fingerprint failure.json
 stackmarshal progress evaluate current.json --previous previous.json
@@ -210,17 +212,32 @@ coverage run -m pytest
 coverage report --fail-under=85
 python -m build
 python -m twine check dist/*
+python scripts/version_contract.py --check
+python scripts/release_gate.py --stage candidate
 ```
+
+`pyproject.toml [project].version` is the release-version authority. Run
+`python scripts/version_contract.py --sync` after intentionally bumping it; CI and the
+release builder fail closed if Core, Skill, or living documentation mirrors drift.
+After the candidate is committed and the worktree is clean, run
+`python scripts/release_gate.py --stage immutable` for the full deterministic release
+and platform-bootstrap installer smoke; this mandatory smoke cannot be skipped. When a restricted
+local host cannot spawn PowerShell/Bash, `python scripts/smoke_installer.py --direct-installer`
+can diagnose the shared installer path, but it does not replace the immutable bootstrap gate.
+`--stage published --release-dir <downloaded-assets>` validates the downloaded bundle's expected
+asset set, checksums, component versions, manifest/provenance HEAD binding, and local release tag.
+The release contract still requires independently recorded GitHub asset digests; bundle-internal
+checksums alone are not an authenticity root.
 
 CI runs on Ubuntu, macOS, and Windows with Python 3.11–3.13. Windows 11-compatible
 behavior is a v1 release requirement.
 
 ## Release artifacts
 
-`python scripts/build_release.py 1.1.1` produces:
+`python scripts/build_release.py` resolves the current version from `pyproject.toml` and produces:
 
 - `install.ps1`, `install.sh`, and the shared verified `installer.py`
-- `stackmarshal-skill-v1.1.1.zip`
+- `stackmarshal-skill-v1.1.2.zip`
 - Python wheel and source distribution
 - source archive
 - `SHA256SUMS`

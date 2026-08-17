@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import importlib.util
 import io
 import json
@@ -13,6 +14,7 @@ import tarfile
 import zipfile
 
 from jsonschema import Draft202012Validator
+import pytest
 
 from stackmarshal.checkpoint import create_checkpoint
 from stackmarshal.config import default_config
@@ -22,6 +24,15 @@ from stackmarshal.state import create_run
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _load_script_module(name: str) -> object:
+    path = ROOT / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"stackmarshal_{name}", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _load_release_module() -> object:
     path = ROOT / "scripts" / "build_release.py"
     spec = importlib.util.spec_from_file_location("stackmarshal_build_release", path)
@@ -29,6 +40,182 @@ def _load_release_module() -> object:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_version_contract_uses_pyproject_as_authority() -> None:
+    module = _load_script_module("version_contract")
+    result = module.check_version_contract(ROOT)  # type: ignore[attr-defined]
+    assert result["coherent"] is True
+    assert result["authority"] == "pyproject.toml:[project].version"
+    assert result["version"] == __version__
+    assert set(result["components"].values()) == {__version__}
+
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "python scripts/version_contract.py --check" in workflow
+    smoke = (ROOT / "scripts" / "smoke_installer.py").read_text(encoding="utf-8")
+    assert f'VERSION = "{__version__}"' not in smoke
+    assert "VERSION = project_version()" in smoke
+
+
+def test_version_contract_sync_updates_only_current_mirrors(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    (root / "src" / "stackmarshal").mkdir(parents=True)
+    (root / "skills" / "stackmarshal").mkdir(parents=True)
+    (root / "docs").mkdir()
+    (root / "pyproject.toml").write_text('[project]\nname = "demo"\nversion = "2.3.4"\n', encoding="utf-8")
+    (root / "src" / "stackmarshal" / "constants.py").write_text('__version__ = "1.1.1"\n', encoding="utf-8")
+    (root / "skills" / "stackmarshal" / "SKILL.md").write_text(
+        '---\nmetadata:\n  version: "1.1.1"\n---\n'
+        'host-ready --version "1.1.1"\n'
+        'doctor --host-skill-version "1.1.1"\n',
+        encoding="utf-8",
+    )
+    (root / "README.md").write_text(
+        "release https://example.invalid/releases/download/v1.1.1/install.sh --version v1.1.1\n"
+        "runtime Python 3.11.8 must remain unrelated\n",
+        encoding="utf-8",
+    )
+    (root / "README.ja.md").write_text(
+        "$skill-installer install https://example.invalid/tree/v1.1.1/skills/stackmarshal\n"
+        "stackmarshal doctor --host-skill-version 1.1.1\n"
+        "runtime Python 3.11.8 must remain unrelated\n",
+        encoding="utf-8",
+    )
+    historical = root / "docs" / "RELEASE_NOTES_v1.1.1.md"
+    historical.write_text("historical v1.1.1\n", encoding="utf-8")
+
+    module = _load_script_module("version_contract")
+    changed = module.sync_version_mirrors(root)  # type: ignore[attr-defined]
+    result = module.check_version_contract(root)  # type: ignore[attr-defined]
+    assert result["coherent"] is True
+    assert result["version"] == "2.3.4"
+    assert set(changed) == {
+        "README.ja.md",
+        "README.md",
+        "skills/stackmarshal/SKILL.md",
+        "src/stackmarshal/constants.py",
+    }
+    assert "releases/download/v2.3.4/install.sh" in (root / "README.md").read_text(encoding="utf-8")
+    assert "--version v2.3.4" in (root / "README.md").read_text(encoding="utf-8")
+    assert "/tree/v2.3.4/skills/stackmarshal" in (root / "README.ja.md").read_text(encoding="utf-8")
+    assert "host-skill-version 2.3.4" in (root / "README.ja.md").read_text(encoding="utf-8")
+    assert "Python 3.11.8" in (root / "README.md").read_text(encoding="utf-8")
+    assert "Python 3.11.8" in (root / "README.ja.md").read_text(encoding="utf-8")
+    assert historical.read_text(encoding="utf-8") == "historical v1.1.1\n"
+
+
+def _write_release_fixture_checksums(directory: Path) -> None:
+    targets = sorted(path for path in directory.iterdir() if path.name != "SHA256SUMS")
+    text = "".join(
+        f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" for path in targets
+    )
+    (directory / "SHA256SUMS").write_text(text, encoding="utf-8")
+
+
+def _write_release_gate_fixture(directory: Path, version: str) -> None:
+    directory.mkdir()
+    payload_names = {
+        "install.ps1",
+        "install.sh",
+        "installer.py",
+        f"stackmarshal-{version}-py3-none-any.whl",
+        f"stackmarshal-{version}.tar.gz",
+        "stackmarshal-sbom.cdx.json",
+        f"stackmarshal-skill-v{version}.zip",
+        f"stackmarshal-source-v{version}.tar.gz",
+    }
+    for name in sorted(payload_names):
+        (directory / name).write_bytes(f"fixture:{name}".encode())
+    (directory / "provenance.json").write_text(
+        json.dumps({"version": version, "git_head": "deadbeef", "dirty_worktree_allowed": False}),
+        encoding="utf-8",
+    )
+    manifest_artifacts = []
+    for path in sorted(directory.iterdir()):
+        manifest_artifacts.append(
+            {
+                "name": path.name,
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "size": path.stat().st_size,
+            }
+        )
+    (directory / "release-manifest.json").write_text(
+        json.dumps(
+            {
+                "version": version,
+                "git_head": "deadbeef",
+                "version_coherence": {
+                    "coherent": True,
+                    "components": {
+                        "project": version,
+                        "core": version,
+                        "skill": version,
+                        "installer_smoke": version,
+                    },
+                },
+                "artifacts": manifest_artifacts,
+            }
+        ),
+        encoding="utf-8",
+    )
+    _write_release_fixture_checksums(directory)
+
+
+def test_release_gate_accepts_complete_clean_fixture(tmp_path: Path) -> None:
+    module = _load_script_module("release_gate")
+    release = tmp_path / "release"
+    _write_release_gate_fixture(release, __version__)
+    result = module.verify_release_directory(  # type: ignore[attr-defined]
+        release,
+        __version__,
+        expected_git_head="deadbeef",
+    )
+    assert result["checksums_verified"] == 10
+    assert result["git_head"] == "deadbeef"
+
+
+def test_release_gate_rejects_checksum_path_traversal_and_duplicate_entries(tmp_path: Path) -> None:
+    module = _load_script_module("release_gate")
+    release = tmp_path / "release"
+    _write_release_gate_fixture(release, __version__)
+    outside = tmp_path / "secret.txt"
+    outside.write_text("secret", encoding="utf-8")
+    digest = hashlib.sha256(outside.read_bytes()).hexdigest()
+
+    (release / "SHA256SUMS").write_text(f"{digest}  ../secret.txt\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="Unsafe checksum target name"):
+        module.verify_release_directory(release, __version__)  # type: ignore[attr-defined]
+
+    target = release / "install.ps1"
+    artifact_digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    (release / "SHA256SUMS").write_text(
+        f"{artifact_digest}  install.ps1\n{artifact_digest}  install.ps1\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="Duplicate checksum target"):
+        module.verify_release_directory(release, __version__)  # type: ignore[attr-defined]
+
+
+def test_release_gate_rejects_forged_component_coherence_and_wrong_head(tmp_path: Path) -> None:
+    module = _load_script_module("release_gate")
+    release = tmp_path / "release"
+    _write_release_gate_fixture(release, __version__)
+    manifest = json.loads((release / "release-manifest.json").read_text(encoding="utf-8"))
+    manifest["version_coherence"]["components"]["skill"] = "0.0.0"
+    (release / "release-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    _write_release_fixture_checksums(release)
+    with pytest.raises(RuntimeError, match="component versions do not match"):
+        module.verify_release_directory(release, __version__)  # type: ignore[attr-defined]
+
+    manifest["version_coherence"]["components"]["skill"] = __version__
+    (release / "release-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    _write_release_fixture_checksums(release)
+    with pytest.raises(RuntimeError, match="expected immutable HEAD"):
+        module.verify_release_directory(  # type: ignore[attr-defined]
+            release,
+            __version__,
+            expected_git_head="cafebabe",
+        )
 
 
 def test_release_version_defaults_to_pyproject_and_keeps_mismatch_guard() -> None:

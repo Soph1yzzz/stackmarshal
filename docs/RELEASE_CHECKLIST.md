@@ -28,9 +28,11 @@
 
 - [x] Ruff
 - [x] mypy strict
-- [x] 61 collected automated tests, including installer and Codex Security regression groups
-- [x] 94% branch-aware Core coverage
+- [x] full automated test suite, including installer, security regression, and permanent live-orchestration E2E contracts
+- [x] branch-aware Core coverage at or above the configured 85% release gate
 - [x] package build and Twine validation
+- [x] `pyproject.toml`-authoritative version contract across Core, Skill, smoke path, CI, and living docs
+- [x] staged release gate (`candidate`, `immutable`, `published`) with machine-readable evidence
 - [x] schema meta-validation
 - [x] Linux, macOS, and Windows CI matrix
 - [x] installer Release build plus bootstrap smoke on each CI operating system
@@ -46,8 +48,12 @@
 - [x] portable SHA256SUMS, SBOM, provenance, and release manifest
 - [x] final Codex Security scan on the immutable release commit is mandatory
 - [x] public GitHub Actions and CodeQL success on the release commit is mandatory
+- [x] release manifest records passing component version-coherence evidence
+- [x] terminal StackMarshal builds finalize bookkeeping before COMPLETE and record a non-mutating terminal repository seal
 - [x] tag-to-commit, GitHub asset digests, downloaded checksums, and clean-install verification are mandatory
 
 The release commit is immutable after its final security scan. Authoritative scan metadata, CI
-and CodeQL run IDs, tag-to-commit verification, and published v1.1.0 asset verification are
-recorded in the GitHub Release body so no post-scan metadata commit is required.
+and CodeQL run IDs, tag-to-commit verification, and published asset verification are recorded in
+the GitHub Release body so no post-scan metadata commit is required. Version-specific counts,
+coverage percentages, commits, and asset digests belong in immutable release notes/evidence rather
+than this living checklist.
