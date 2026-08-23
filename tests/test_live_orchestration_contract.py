@@ -48,6 +48,20 @@ def test_finalization_project_rejects_workspace_escape_symlink(tmp_path: Path) -
         _safe_finalization_project(root, require_audit=False)
 
 
+def test_finalize_classifies_unsafe_managed_state_as_invalid_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "project"
+    temporary_graph = root / ".stackmarshal" / "project" / "task-graph.json.tmp"
+    temporary_graph.mkdir(parents=True)
+
+    code, payload = _call(capsys, ["--root", str(root), "finalize", "--run-id", "run-placeholder"])
+
+    assert code == EXIT_INVALID_STATE
+    assert payload["finalized"] is False
+    assert any("task-graph.json.tmp" in str(error) for error in payload["errors"])
+
+
 def test_nested_workspace_live_orchestration_contract(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -670,33 +670,37 @@ def cmd_audit(args: argparse.Namespace) -> int:
 
 def cmd_finalize(args: argparse.Namespace) -> int:
     root = _root(args.root)
-    path, state = _find_state(root, args.run_id)
-    if state.status is not Status.RUNNING or state.phase is not Phase.VERIFICATION:
-        _json({
-            "finalized": False,
-            "reason": "finalization_requires_running_verification",
-            "status": state.status.value,
-            "phase": state.phase.value,
-        })
+    try:
+        path, state = _find_state(root, args.run_id)
+        if state.status is not Status.RUNNING or state.phase is not Phase.VERIFICATION:
+            _json({
+                "finalized": False,
+                "reason": "finalization_requires_running_verification",
+                "status": state.status.value,
+                "phase": state.phase.value,
+            })
+            return EXIT_INVALID_STATE
+        _refresh_project_with_event(root, path, state)
+        errors = _completion_gate_errors(root, state, require_finalization=False)
+        if errors:
+            _json({"finalized": False, "errors": errors})
+            return EXIT_INVALID_STATE
+        graph = load_task_graph(root, required=True)
+        save_task_graph(root, graph)
+        CodexAdapter(root).write_audit(root / STATE_DIR / "project" / "environment-audit.json")
+        _refresh_project_with_event(root, path, state)
+        finalization = _finalization_snapshot(root)
+        state.progress["finalization"] = finalization
+        save_state(state, path)
+        append_event(
+            path.with_name("events.jsonl"),
+            "finalization_completed",
+            state.phase,
+            finalization,
+        )
+    except ValueError as exc:
+        _json({"finalized": False, "errors": [str(exc)]})
         return EXIT_INVALID_STATE
-    _refresh_project_with_event(root, path, state)
-    errors = _completion_gate_errors(root, state, require_finalization=False)
-    if errors:
-        _json({"finalized": False, "errors": errors})
-        return EXIT_INVALID_STATE
-    graph = load_task_graph(root, required=True)
-    save_task_graph(root, graph)
-    CodexAdapter(root).write_audit(root / STATE_DIR / "project" / "environment-audit.json")
-    _refresh_project_with_event(root, path, state)
-    finalization = _finalization_snapshot(root)
-    state.progress["finalization"] = finalization
-    save_state(state, path)
-    append_event(
-        path.with_name("events.jsonl"),
-        "finalization_completed",
-        state.phase,
-        finalization,
-    )
     _json({"finalized": True, "run_id": state.run_id, "finalization": finalization})
     return 0
 

@@ -2,7 +2,7 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
-## [Unreleased]
+## [1.1.2] - 2026-08-23
 
 ### Added
 
@@ -16,6 +16,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Finalization now classifies unsafe managed-state paths as `INVALID_STATE` consistently across platforms, including symlink-capable Linux/macOS CI.
 - Release manifests include component version-coherence evidence.
 - Living release checklist uses stable gate requirements instead of stale release-specific counts.
 - Future work now lives at the repository-contract path `docs/FUTURE_WORK.md`.

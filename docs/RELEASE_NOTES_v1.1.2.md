@@ -29,6 +29,8 @@ from the v1.1.0 -> v1.1.1 patch cycle.
   explicit user CLI choice rather than a repository-controlled policy escalation.
 - Release manifests now carry explicit component version-coherence evidence.
 - Build-mode runs must execute `stackmarshal finalize` during VERIFICATION before COMPLETE.
+  Unsafe managed-state paths encountered during finalization are normalized to `INVALID_STATE`
+  consistently across Windows, Linux, and macOS instead of being misclassified as invalid input.
   The final verification activity records a terminal deliverable fingerprint; finalization refuses
   source/build/dist/release changes after that evidence boundary, regenerates the task view and
   environment audit, and seals the complete `.stackmarshal/project/` evidence tree plus the verified
