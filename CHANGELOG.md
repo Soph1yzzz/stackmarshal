@@ -7,8 +7,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 ### Added
 
 - v1.1.2 release-version contract with `pyproject.toml` as authority and fail-closed Core/Skill/docs coherence checks.
-- Staged candidate/immutable/published release gate with machine-readable evidence.
+- Staged candidate/immutable/published release gate with machine-readable evidence, safe build-output cleanup, and immutable Git-state contamination checks.
 - Explicit VERIFICATION finalization and non-mutating terminal repository seal before COMPLETE.
+- Workspace-state symlink/junction containment across initialization, runtime state, finalization, version sync, and release-gate evidence writes.
+- Fail-closed Git read-command option handling for helper execution, output writes, alias/global-option injection, and repository-read escapes.
+- Repository configuration guardrails that permit tighter budgets but require explicit user CLI selection for deep/looser execution budgets and preserve mandatory approvals/guarded autonomy.
 - Permanent nested-workspace live-orchestration E2E regression contract.
 
 ### Changed

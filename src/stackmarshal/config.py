@@ -86,18 +86,63 @@ def default_config(profile: str = "standard") -> Config:
 def load_config(path: Path) -> Config:
     if not path.exists():
         return default_config()
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"Project config must be a regular non-symlink file: {path}")
     with path.open("rb") as handle:
         raw: dict[str, Any] = tomllib.load(handle)
+
+    schema_version = str(raw.get("schema_version", "1.0"))
+    if schema_version != "1.0":
+        raise ValueError(f"Unsupported config schema_version: {schema_version}")
+
     profile = str(raw.get("budget_profile", "standard"))
+    if profile == "deep":
+        raise ValueError("Project config may not select the deep budget profile; pass --budget deep explicitly")
     base = default_config(profile)
-    limits = base.limits | {str(k): int(v) for k, v in raw.get("limits", {}).items()}
-    approval = base.approval | {str(k): bool(v) for k, v in raw.get("approval", {}).items()}
-    state = base.state | {str(k): bool(v) for k, v in raw.get("state", {}).items()}
+
+    raw_limits = raw.get("limits", {})
+    if not isinstance(raw_limits, dict):
+        raise ValueError("Config [limits] must be a table")
+    limits = dict(base.limits)
+    for raw_key, raw_value in raw_limits.items():
+        key = str(raw_key)
+        if key not in base.limits:
+            raise ValueError(f"Unknown budget limit in project config: {key}")
+        value = int(raw_value)
+        if value <= 0:
+            raise ValueError(f"Budget limit must be positive: {key}={value}")
+        if value > base.limits[key]:
+            raise ValueError(
+                f"Project config may only tighten budget limits: {key}={value} exceeds {base.limits[key]}"
+            )
+        limits[key] = value
+
+    raw_approval = raw.get("approval", {})
+    if not isinstance(raw_approval, dict):
+        raise ValueError("Config [approval] must be a table")
+    approval = dict(base.approval)
+    for raw_key, raw_value in raw_approval.items():
+        key = str(raw_key)
+        if key not in base.approval:
+            raise ValueError(f"Unknown approval policy in project config: {key}")
+        value = bool(raw_value)
+        if base.approval[key] and not value:
+            raise ValueError(f"Project config may not disable required approval: {key}")
+        approval[key] = value
+
+    autonomy = str(raw.get("autonomy", "guarded"))
+    if autonomy != "guarded":
+        raise ValueError("Project config may not weaken autonomy below guarded")
+
+    raw_state = raw.get("state", {})
+    if not isinstance(raw_state, dict):
+        raise ValueError("Config [state] must be a table")
+    state = base.state | {str(k): bool(v) for k, v in raw_state.items()}
     return Config(
-        schema_version=str(raw.get("schema_version", "1.0")),
+        schema_version=schema_version,
         mode=str(raw.get("mode", "build")),
         budget_profile=profile,
-        autonomy=str(raw.get("autonomy", "guarded")),
+        autonomy=autonomy,
         language=str(raw.get("language", "auto")),
         limits=limits,
         approval=approval,

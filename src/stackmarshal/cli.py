@@ -68,6 +68,49 @@ def _root(value: str) -> Path:
     return Path(value).expanduser().resolve()
 
 
+def _assert_workspace_entry(
+    root: Path,
+    path: Path,
+    *,
+    expected: str | None = None,
+) -> None:
+    """Reject symlink/junction escapes before StackMarshal reads or writes workspace state."""
+
+    resolved_root = root.resolve(strict=True)
+    if not resolved_root.is_dir():
+        raise ValueError(f"Workspace root is not a directory: {root}")
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"Workspace state path is outside the workspace: {path}") from exc
+    if path.is_symlink():
+        raise ValueError(f"Workspace state path may not be a symlink: {path.relative_to(root)}")
+    if path.exists():
+        try:
+            resolved = path.resolve(strict=True)
+        except OSError as exc:
+            raise ValueError(f"Workspace state path cannot be resolved safely: {path.relative_to(root)}") from exc
+        if resolved != resolved_root and resolved_root not in resolved.parents:
+            raise ValueError(f"Workspace state path escapes the workspace: {path.relative_to(root)}")
+        if expected == "dir" and not path.is_dir():
+            raise ValueError(f"Workspace state directory is not a directory: {path.relative_to(root)}")
+        if expected == "file" and not path.is_file():
+            raise ValueError(f"Workspace state file is not a regular file: {path.relative_to(root)}")
+        return
+
+    ancestor = path.parent
+    while not ancestor.exists() and not ancestor.is_symlink() and ancestor != root:
+        ancestor = ancestor.parent
+    if ancestor.is_symlink():
+        raise ValueError(f"Workspace state ancestor may not be a symlink: {ancestor.relative_to(root)}")
+    try:
+        resolved_ancestor = ancestor.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(f"Workspace state ancestor cannot be resolved safely: {ancestor}") from exc
+    if resolved_ancestor != resolved_root and resolved_root not in resolved_ancestor.parents:
+        raise ValueError(f"Workspace state ancestor escapes the workspace: {ancestor.relative_to(root)}")
+
+
 def _paths(root: Path, run_id: str | None = None) -> dict[str, Path]:
     base = root / STATE_DIR
     result = {
@@ -76,11 +119,30 @@ def _paths(root: Path, run_id: str | None = None) -> dict[str, Path]:
         "project": base / "project",
         "runs": base / "runs",
     }
+    for path, expected in (
+        (base, "dir"),
+        (result["config"], "file"),
+        (result["project"], "dir"),
+        (result["runs"], "dir"),
+    ):
+        _assert_workspace_entry(root, path, expected=expected)
+    for name in ("task-graph.json", "task-graph.md", "environment-audit.json", "task-graph.json.tmp"):
+        _assert_workspace_entry(root, result["project"] / name, expected="file")
     if run_id:
         validated_run_id = validate_run_id(run_id)
         result["run"] = result["runs"] / validated_run_id
         result["state"] = result["run"] / "run.json"
         result["events"] = result["run"] / "events.jsonl"
+        _assert_workspace_entry(root, result["run"], expected="dir")
+        for name in (
+            "run.json",
+            "events.jsonl",
+            "environment-audit.json",
+            "checkpoint.json",
+            "checkpoint.md",
+            "final-report.md",
+        ):
+            _assert_workspace_entry(root, result["run"] / name, expected="file")
     return result
 
 
@@ -90,6 +152,8 @@ def _active_runs(root: Path) -> list[tuple[Path, Any]]:
         return []
     active: list[tuple[Path, Any]] = []
     for path in sorted(runs.glob("*/run.json")):
+        _assert_workspace_entry(root, path.parent, expected="dir")
+        _assert_workspace_entry(root, path, expected="file")
         state = load_state(path)
         if state.status is Status.RUNNING:
             active.append((path, state))
@@ -120,22 +184,65 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _finalization_files(root: Path) -> dict[str, Path]:
-    project = root / STATE_DIR / "project"
-    required = {
-        "task-graph.json": project / "task-graph.json",
-        "task-graph.md": project / "task-graph.md",
-        "environment-audit.json": project / "environment-audit.json",
-    }
-    missing = [name for name, path in required.items() if not path.is_file() or path.is_symlink()]
-    if missing:
-        raise ValueError(f"Finalization files are missing or unsafe: {', '.join(missing)}")
-    files: dict[str, Path] = {}
-    for path in sorted(project.rglob("*"), key=lambda item: item.as_posix()):
+def _safe_finalization_project(root: Path, *, require_audit: bool) -> Path:
+    """Validate the StackMarshal project-state boundary before any finalization I/O."""
+
+    resolved_root = root.resolve(strict=True)
+    state_dir = root / STATE_DIR
+    project = state_dir / "project"
+    for label, path in ((STATE_DIR, state_dir), (f"{STATE_DIR}/project", project)):
         if path.is_symlink():
-            raise ValueError(f"Finalization project evidence may not be a symlink: {path.relative_to(project)}")
-        if path.is_file():
-            files[path.relative_to(project).as_posix()] = path
+            raise ValueError(f"{label} may not be a symlink")
+        try:
+            resolved = path.resolve(strict=True)
+        except OSError as exc:
+            raise ValueError(f"Missing finalization directory: {label}") from exc
+        if resolved_root not in resolved.parents or not resolved.is_dir():
+            raise ValueError(f"Finalization directory escapes workspace or is not a directory: {label}")
+
+    required = [project / "task-graph.json", project / "task-graph.md"]
+    audit = project / "environment-audit.json"
+    if require_audit or audit.exists() or audit.is_symlink():
+        required.append(audit)
+    for path in required:
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"Finalization file is missing or unsafe: {path.relative_to(project).as_posix()}")
+        resolved = path.resolve(strict=True)
+        if project.resolve(strict=True) not in resolved.parents:
+            raise ValueError(f"Finalization file escapes project state: {path.relative_to(project).as_posix()}")
+
+    temporary = project / "task-graph.json.tmp"
+    if temporary.is_symlink():
+        raise ValueError("Finalization temporary task graph may not be a symlink")
+    return project.resolve(strict=True)
+
+
+def _finalization_files(root: Path) -> dict[str, Path]:
+    project = _safe_finalization_project(root, require_audit=True)
+    files: dict[str, Path] = {}
+    pending = [project]
+    visited_dirs = {project}
+    while pending:
+        directory = pending.pop()
+        for path in sorted(directory.iterdir(), key=lambda item: item.name.casefold(), reverse=True):
+            relative = path.relative_to(project)
+            if path.is_symlink():
+                raise ValueError(f"Finalization project evidence may not be a symlink: {relative}")
+            try:
+                resolved = path.resolve(strict=True)
+            except OSError as exc:
+                raise ValueError(f"Finalization project evidence changed while sealing: {relative}") from exc
+            if resolved != project and project not in resolved.parents:
+                raise ValueError(f"Finalization project evidence escapes project state: {relative}")
+            if path.is_file():
+                files[relative.as_posix()] = path
+            elif path.is_dir():
+                if resolved in visited_dirs:
+                    raise ValueError(f"Finalization project evidence contains a directory alias or cycle: {relative}")
+                visited_dirs.add(resolved)
+                pending.append(path)
+            else:
+                raise ValueError(f"Finalization project evidence contains unsupported entry: {relative}")
     return files
 
 
@@ -172,7 +279,16 @@ def _finalization_errors(root: Path, state: Any) -> list[str]:
 
 def _completion_gate_errors(root: Path, state: Any, *, require_finalization: bool = True) -> list[str]:
     require_graph = state.mode is Mode.BUILD and int(state.progress.get("live_contract_version", 0)) >= 1
-    errors = task_completion_errors(root, require_graph=require_graph)
+    errors: list[str] = []
+    project_state_safe = True
+    if require_graph:
+        try:
+            _safe_finalization_project(root, require_audit=False)
+        except ValueError as exc:
+            errors.append(f"unsafe_finalization_project:{exc}")
+            project_state_safe = False
+    if project_state_safe:
+        errors.extend(task_completion_errors(root, require_graph=require_graph))
     errors.extend(completion_activity_errors(state))
     if state.mode is Mode.BUILD and require_graph:
         snapshots = state.progress.get("phase_snapshots", {})
@@ -204,6 +320,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         template = Path(__file__).with_name("data") / "stackmarshal.toml"
         shutil.copyfile(template, paths["config"])
     gitignore = root / ".gitignore"
+    _assert_workspace_entry(root, gitignore, expected="file")
     marker = ".stackmarshal/runs/\n!.stackmarshal/runs/*/checkpoint.md\n!.stackmarshal/runs/*/checkpoint.json\n"
     if gitignore.exists():
         current = gitignore.read_text(encoding="utf-8")
@@ -230,10 +347,8 @@ def cmd_start(args: argparse.Namespace) -> int:
     if not validate_invocation(args.invocation):
         _json({"started": False, "reason": "explicit_invocation_required"})
         return EXIT_INVALID_INPUT
-    config = load_config(_paths(root)["config"])
+    config = default_config(args.budget) if args.budget else load_config(_paths(root)["config"])
     mode = Mode(args.mode) if args.mode else infer_mode(args.invocation)
-    if args.budget:
-        config = default_config(args.budget)
     state = create_run(root, args.invocation, mode, config)
     paths = _paths(root, state.run_id)
     save_state(state, paths["state"])
@@ -246,12 +361,19 @@ def cmd_start(args: argparse.Namespace) -> int:
 def _find_state(root: Path, run_id: str | None) -> tuple[Path, Any]:
     runs = _paths(root)["runs"]
     if run_id:
-        path = runs / validate_run_id(run_id) / "run.json"
+        selected = _paths(root, validate_run_id(run_id))
+        path = selected["state"]
     else:
-        candidates = sorted(runs.glob("*/run.json"), key=lambda item: item.stat().st_mtime, reverse=True)
+        candidates: list[Path] = []
+        for candidate in runs.glob("*/run.json"):
+            _assert_workspace_entry(root, candidate.parent, expected="dir")
+            _assert_workspace_entry(root, candidate, expected="file")
+            candidates.append(candidate)
+        candidates.sort(key=lambda item: item.stat().st_mtime, reverse=True)
         if not candidates:
             raise FileNotFoundError("No StackMarshal run found")
         path = candidates[0]
+        _paths(root, path.parent.name)
     return path, load_state(path)
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 
@@ -10,12 +11,12 @@ import pytest
 
 from stackmarshal.acquisition import AcquisitionReceipt, install_project_file, rollback
 from stackmarshal.checkpoint import create_checkpoint, inspect_checkpoint
-from stackmarshal.cli import EXIT_INVALID_INPUT, main
+from stackmarshal.cli import EXIT_INVALID_INPUT, _finalization_files, main
 from stackmarshal.config import default_config
 from stackmarshal.constants import CommandClass, Mode, Status
 from stackmarshal.integrity import sign_record, signing_key_path
 from stackmarshal.security import classify_command
-from stackmarshal.state import create_run, project_info
+from stackmarshal.state import create_run, project_info, terminal_workspace_fingerprint, workspace_fingerprint
 
 
 def test_command_classification_fails_closed_for_unknown_and_variants() -> None:
@@ -29,12 +30,129 @@ def test_command_classification_fails_closed_for_unknown_and_variants() -> None:
         (["find", ".", "-delete"], CommandClass.PROJECT_WRITE),
         (["python", "-c", "import os; os.remove('x')"], CommandClass.PROJECT_WRITE),
         (["git", "status", ";", "rm", "-rf", "."], CommandClass.PRIVILEGED),
+        (["git", "grep", "--open-files-in-pager=echo", "needle"], CommandClass.PROJECT_WRITE),
+        (["git", "diff", "--ext-diff"], CommandClass.PROJECT_WRITE),
+        (["git", "diff", "--textconv"], CommandClass.PROJECT_WRITE),
+        (["git", "diff", "--output=outside.patch"], CommandClass.PROJECT_WRITE),
+        (["git", "diff", "--no-index", "one", "two"], CommandClass.PROJECT_WRITE),
+        (["git", "-c", "alias.escape=!echo", "escape"], CommandClass.PROJECT_WRITE),
+        (["git", "local-alias-that-might-execute"], CommandClass.PROJECT_WRITE),
     ]
     for argv, expected in cases:
         decision = classify_command(argv)
         assert decision.command_class is expected
         assert decision.approval_required is True
     assert classify_command(["git", "status"]).approval_required is False
+
+
+def test_init_rejects_symlinked_state_and_gitignore_targets(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for target_name in (".stackmarshal", ".gitignore"):
+        root = tmp_path / target_name.replace(".", "")
+        root.mkdir()
+        outside = tmp_path / f"outside-{root.name}"
+        if target_name == ".stackmarshal":
+            outside.mkdir()
+        else:
+            outside.write_text("sentinel\n", encoding="utf-8")
+        link = root / target_name
+        try:
+            link.symlink_to(outside, target_is_directory=outside.is_dir())
+        except OSError as exc:
+            pytest.skip(f"Symlink creation is unavailable: {exc}")
+
+        code = main(["--root", str(root), "init"])
+        assert code == EXIT_INVALID_INPUT
+        assert "symlink" in capsys.readouterr().err.casefold()
+        if outside.is_file():
+            assert outside.read_text(encoding="utf-8") == "sentinel\n"
+        else:
+            assert list(outside.iterdir()) == []
+
+
+def test_init_rejects_windows_junction_state_escape(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    if os.name != "nt":
+        pytest.skip("Windows junction regression")
+    root = tmp_path / "junction-project"
+    root.mkdir()
+    outside = tmp_path / "junction-outside"
+    outside.mkdir()
+    junction = root / ".stackmarshal"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(junction), str(outside)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"Junction creation is unavailable: {created.stderr or created.stdout}")
+    try:
+        code = main(["--root", str(root), "init"])
+        assert code == EXIT_INVALID_INPUT
+        assert "escapes the workspace" in capsys.readouterr().err
+        assert list(outside.iterdir()) == []
+    finally:
+        subprocess.run(["cmd", "/c", "rmdir", str(junction)], check=False, capture_output=True)
+
+
+def test_finalization_evidence_rejects_nested_windows_junction(tmp_path: Path) -> None:
+    if os.name != "nt":
+        pytest.skip("Windows junction regression")
+    root = tmp_path / "finalization-project"
+    project = root / ".stackmarshal" / "project"
+    project.mkdir(parents=True)
+    for name in ("task-graph.json", "task-graph.md", "environment-audit.json"):
+        (project / name).write_text("{}\n" if name.endswith(".json") else "# evidence\n", encoding="utf-8")
+    outside = tmp_path / "finalization-outside"
+    outside.mkdir()
+    secret = outside / "secret.txt"
+    secret.write_text("must-not-be-sealed\n", encoding="utf-8")
+    junction = project / "linked-evidence"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(junction), str(outside)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"Junction creation is unavailable: {created.stderr or created.stdout}")
+    try:
+        with pytest.raises(ValueError, match="escapes project state"):
+            _finalization_files(root)
+        assert secret.read_text(encoding="utf-8") == "must-not-be-sealed\n"
+    finally:
+        subprocess.run(["cmd", "/c", "rmdir", str(junction)], check=False, capture_output=True)
+
+
+def test_workspace_fingerprints_reject_windows_junction_reads(tmp_path: Path) -> None:
+    if os.name != "nt":
+        pytest.skip("Windows junction regression")
+    root = tmp_path / "fingerprint-project"
+    root.mkdir()
+    outside = tmp_path / "fingerprint-outside"
+    outside.mkdir()
+    secret = outside / "secret.txt"
+    secret.write_text("must-not-be-read\n", encoding="utf-8")
+    junction = root / "payload-link"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(junction), str(outside)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"Junction creation is unavailable: {created.stderr or created.stdout}")
+    try:
+        with pytest.raises(ValueError, match="escapes during fingerprint"):
+            workspace_fingerprint(root)
+        with pytest.raises(ValueError, match="escapes during fingerprint"):
+            terminal_workspace_fingerprint(root)
+        assert secret.read_text(encoding="utf-8") == "must-not-be-read\n"
+    finally:
+        subprocess.run(["cmd", "/c", "rmdir", str(junction)], check=False, capture_output=True)
 
 
 def test_run_id_path_traversal_is_rejected(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

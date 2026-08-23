@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from stackmarshal.cli import EXIT_COMPLETE, EXIT_INVALID_STATE, main
+from stackmarshal.cli import EXIT_COMPLETE, EXIT_INVALID_STATE, _safe_finalization_project, main
 from stackmarshal.constants import Phase, Status
 from stackmarshal.state import load_state
 from stackmarshal.taskgraph import load_task_graph
@@ -29,6 +29,23 @@ def _move(root: Path, run_id: str, phase: Phase, capsys: pytest.CaptureFixture[s
         ["--root", str(root), "state", "transition", phase.value, "--run-id", run_id],
     )
     assert code in {0, EXIT_COMPLETE}, payload
+
+
+def test_finalization_project_rejects_workspace_escape_symlink(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    outside_state = tmp_path / "outside-state"
+    outside_project = outside_state / "project"
+    outside_project.mkdir(parents=True)
+    (outside_project / "task-graph.json").write_text('{"schema_version":"1.0","tasks":[]}\n', encoding="utf-8")
+    (outside_project / "task-graph.md").write_text("# Task Graph\n", encoding="utf-8")
+    try:
+        (root / ".stackmarshal").symlink_to(outside_state, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"Symlink creation is unavailable: {exc}")
+
+    with pytest.raises(ValueError, match=r"symlink|escapes workspace"):
+        _safe_finalization_project(root, require_audit=False)
 
 
 def test_nested_workspace_live_orchestration_contract(
@@ -204,6 +221,22 @@ def test_nested_workspace_live_orchestration_contract(
         ],
     )
     assert code == 0
+
+    # Finalization writes an atomic task-graph temporary file. A pre-existing
+    # symlink there must fail closed instead of redirecting that write.
+    outside_tmp = tmp_path / "outside-task-graph.json"
+    outside_tmp.write_text("outside\n", encoding="utf-8")
+    temporary_graph = child / ".stackmarshal" / "project" / "task-graph.json.tmp"
+    try:
+        temporary_graph.symlink_to(outside_tmp)
+    except OSError:
+        pass
+    else:
+        code, unsafe_finalize = _call(capsys, ["--root", str(child), "finalize", "--run-id", run_id])
+        assert code == EXIT_INVALID_STATE
+        assert any("temporary task graph" in str(error) for error in unsafe_finalize["errors"])
+        assert outside_tmp.read_text(encoding="utf-8") == "outside\n"
+        temporary_graph.unlink()
 
     deliverable = child / "deliverable.txt"
     deliverable.write_text("changed after verification\n", encoding="utf-8")

@@ -175,11 +175,53 @@ def verify_release_directory(
     }
 
 
-def _write_report(report: dict[str, Any]) -> tuple[Path, Path]:
-    directory = ROOT / "build" / "release-gate"
-    directory.mkdir(parents=True, exist_ok=True)
+def _safe_output_directory(root: Path, path: Path) -> Path:
+    """Validate a root-level build output before deleting or reusing it."""
+
+    resolved_root = root.resolve(strict=True)
+    if path.is_symlink():
+        raise RuntimeError(f"Build output may not be a symlink: {path.relative_to(root)}")
+    if not path.exists():
+        if path.parent.resolve(strict=True) != resolved_root:
+            raise RuntimeError(f"Build output parent escapes repository root: {path.relative_to(root)}")
+        return path
+    resolved = path.resolve(strict=True)
+    if resolved.parent != resolved_root or not resolved.is_dir():
+        raise RuntimeError(f"Build output escapes repository root or is not a directory: {path.relative_to(root)}")
+    return path
+
+
+def _safe_report_directory(root: Path) -> Path:
+    """Create the report directory without following repository-escape links."""
+
+    resolved_root = root.resolve(strict=True)
+    current = resolved_root
+    for part in ("build", "release-gate"):
+        candidate = current / part
+        if candidate.exists() or candidate.is_symlink():
+            if candidate.is_symlink():
+                raise RuntimeError(f"Release gate report path may not be a symlink: {candidate}")
+            try:
+                resolved = candidate.resolve(strict=True)
+            except OSError as exc:
+                raise RuntimeError(f"Release gate report path is invalid: {candidate}") from exc
+            if resolved_root not in resolved.parents:
+                raise RuntimeError(f"Release gate report path escapes repository root: {candidate}")
+            if not resolved.is_dir():
+                raise RuntimeError(f"Release gate report path is not a directory: {candidate}")
+            current = resolved
+        else:
+            candidate.mkdir()
+            current = candidate
+    return current
+
+
+def _write_report(report: dict[str, Any], *, root: Path = ROOT) -> tuple[Path, Path]:
+    directory = _safe_report_directory(root)
     json_path = directory / "release-gate-report.json"
     md_path = directory / "release-gate-report.md"
+    if json_path.is_symlink() or md_path.is_symlink():
+        raise RuntimeError("Release gate report files may not be symlinks")
     json_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     lines = [
         "# StackMarshal Release Gate",
@@ -237,9 +279,11 @@ def run_gate(stage: str, *, release_dir: Path | None = None) -> dict[str, Any]:
     record("coverage_gate", lambda: _run([sys.executable, "-m", "coverage", "report", "--fail-under=85"]))
 
     if stage == "candidate":
-        dist = ROOT / "dist"
-        if dist.exists():
-            shutil.rmtree(dist)
+        build = _safe_output_directory(ROOT, ROOT / "build")
+        dist = _safe_output_directory(ROOT, ROOT / "dist")
+        for directory in (build, dist):
+            if directory.exists():
+                shutil.rmtree(directory)
         record("package_build", lambda: _run([sys.executable, "-m", "build"]))
         artifacts = sorted((ROOT / "dist").glob("*"))
         record("twine", lambda: _run([sys.executable, "-m", "twine", "check", *[str(path) for path in artifacts]]))

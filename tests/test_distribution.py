@@ -104,6 +104,42 @@ def test_version_contract_sync_updates_only_current_mirrors(tmp_path: Path) -> N
     assert historical.read_text(encoding="utf-8") == "historical v1.1.1\n"
 
 
+def test_version_contract_rejects_symlink_mirror_without_partial_writes(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    (root / "src" / "stackmarshal").mkdir(parents=True)
+    (root / "skills" / "stackmarshal").mkdir(parents=True)
+    (root / "pyproject.toml").write_text('[project]\nname = "demo"\nversion = "2.3.4"\n', encoding="utf-8")
+    constants = root / "src" / "stackmarshal" / "constants.py"
+    constants.write_text('__version__ = "1.1.1"\n', encoding="utf-8")
+    skill = root / "skills" / "stackmarshal" / "SKILL.md"
+    skill.write_text(
+        '---\nmetadata:\n  version: "1.1.1"\n---\n'
+        'host-ready --version "1.1.1"\n'
+        'doctor --host-skill-version "1.1.1"\n',
+        encoding="utf-8",
+    )
+    outside = tmp_path / "outside-readme.md"
+    outside_text = "release https://example.invalid/releases/download/v1.1.1/install.sh --version v1.1.1\n"
+    outside.write_text(outside_text, encoding="utf-8")
+    readme = root / "README.md"
+    try:
+        readme.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"Symlink creation is unavailable: {exc}")
+    (root / "README.ja.md").write_text(
+        "$skill-installer install https://example.invalid/tree/v1.1.1/skills/stackmarshal\n",
+        encoding="utf-8",
+    )
+
+    module = _load_script_module("version_contract")
+    with pytest.raises(ValueError, match="symlink"):
+        module.sync_version_mirrors(root)  # type: ignore[attr-defined]
+
+    assert outside.read_text(encoding="utf-8") == outside_text
+    assert constants.read_text(encoding="utf-8") == '__version__ = "1.1.1"\n'
+    assert 'version: "1.1.1"' in skill.read_text(encoding="utf-8")
+
+
 def _write_release_fixture_checksums(directory: Path) -> None:
     targets = sorted(path for path in directory.iterdir() if path.name != "SHA256SUMS")
     text = "".join(
@@ -159,6 +195,84 @@ def _write_release_gate_fixture(directory: Path, version: str) -> None:
         encoding="utf-8",
     )
     _write_release_fixture_checksums(directory)
+
+
+def test_release_gate_report_rejects_workspace_escape_symlink(tmp_path: Path) -> None:
+    module = _load_script_module("release_gate")
+    root = tmp_path / "repo"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    try:
+        (root / "build").symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"Symlink creation is unavailable: {exc}")
+    report = {
+        "stage": "candidate",
+        "version": __version__,
+        "git_head": "deadbeef",
+        "clean_worktree_required": False,
+        "passed": False,
+        "checks": [],
+    }
+    with pytest.raises(RuntimeError, match=r"symlink|escapes"):
+        module._write_report(report, root=root)  # type: ignore[attr-defined]
+    assert not (outside / "release-gate").exists()
+
+
+def test_release_git_state_rejects_hidden_index_flags_and_ignored_inputs(tmp_path: Path) -> None:
+    module = _load_release_module()
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.email", "release@example.invalid"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "Release Test"], cwd=root, check=True)
+    tracked = root / "tracked.txt"
+    tracked.write_text("base\n", encoding="utf-8")
+    (root / ".gitignore").write_text("skills/stackmarshal/ignored.txt\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt", ".gitignore"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=root, check=True)
+
+    subprocess.run(["git", "update-index", "--assume-unchanged", "tracked.txt"], cwd=root, check=True)
+    with pytest.raises(ValueError, match="hidden/nonstandard Git index flags"):
+        module.validate_release_git_state(root)  # type: ignore[attr-defined]
+    subprocess.run(["git", "update-index", "--no-assume-unchanged", "tracked.txt"], cwd=root, check=True)
+
+    ignored = root / "skills" / "stackmarshal" / "ignored.txt"
+    ignored.parent.mkdir(parents=True)
+    ignored.write_text("contamination\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Ignored files could contaminate release artifacts"):
+        module.validate_release_git_state(root)  # type: ignore[attr-defined]
+
+
+def test_release_output_cleanup_rejects_windows_junction_escape(tmp_path: Path) -> None:
+    if os.name != "nt":
+        pytest.skip("Windows junction regression")
+    gate = _load_script_module("release_gate")
+    builder = _load_release_module()
+    root = tmp_path / "repo"
+    root.mkdir()
+    outside = tmp_path / "outside-output"
+    outside.mkdir()
+    sentinel = outside / "keep.txt"
+    sentinel.write_text("keep\n", encoding="utf-8")
+    junction = root / "build"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(junction), str(outside)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"Junction creation is unavailable: {created.stderr or created.stdout}")
+    try:
+        with pytest.raises(RuntimeError, match="escapes repository root"):
+            gate._safe_output_directory(root, junction)  # type: ignore[attr-defined]
+        with pytest.raises(ValueError, match="escapes repository root"):
+            builder.safe_output_directory(root, junction)  # type: ignore[attr-defined]
+        assert sentinel.read_text(encoding="utf-8") == "keep\n"
+    finally:
+        subprocess.run(["cmd", "/c", "rmdir", str(junction)], check=False, capture_output=True)
 
 
 def test_release_gate_accepts_complete_clean_fixture(tmp_path: Path) -> None:

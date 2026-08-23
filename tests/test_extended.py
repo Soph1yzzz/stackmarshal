@@ -36,12 +36,12 @@ def test_config_profiles_and_toml_overrides(tmp_path: Path) -> None:
     path.write_text(
         """schema_version = "1.0"
 budget_profile = "quick"
-autonomy = "autonomous"
+autonomy = "guarded"
 language = "ja"
 [limits]
 tool_calls = 7
 [approval]
-publication = false
+publication = true
 [state]
 checkpoint_on_complete = true
 """,
@@ -50,9 +50,29 @@ checkpoint_on_complete = true
     config = load_config(path)
     assert config.budget_profile == "quick"
     assert config.limits["tool_calls"] == 7
-    assert config.approval["publication"] is False
+    assert config.approval["publication"] is True
     assert config.state["checkpoint_on_complete"] is True
     assert load_config(tmp_path / "missing.toml").budget_profile == "standard"
+
+
+def test_project_config_cannot_weaken_safety_limits_or_approvals(tmp_path: Path) -> None:
+    path = tmp_path / "stackmarshal.toml"
+
+    path.write_text('budget_profile = "deep"\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="may not select the deep budget profile"):
+        load_config(path)
+
+    path.write_text('[limits]\ntool_calls = 121\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="may only tighten budget limits"):
+        load_config(path)
+
+    path.write_text('[approval]\npublication = false\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="may not disable required approval"):
+        load_config(path)
+
+    path.write_text('autonomy = "autonomous"\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="may not weaken autonomy"):
+        load_config(path)
 
 
 def test_budget_unknown_and_check() -> None:

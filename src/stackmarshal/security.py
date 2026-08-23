@@ -39,6 +39,18 @@ _SAFE_GIT_SUBCOMMANDS = {
     "show",
     "status",
 }
+_SAFE_GIT_PROJECT_WRITE_SUBCOMMANDS = {
+    "add",
+    "commit",
+    "init",
+}
+_GIT_UNSAFE_READ_OPTIONS = {
+    "--ext-diff",
+    "--textconv",
+    "--no-index",
+    "--open-files-in-pager",
+    "--output",
+}
 _SHELL_META = re.compile(r"(?:^|\s)(?:&&|\|\||[;`]|\$\(|>+|<+)(?:\s|$)")
 
 
@@ -51,6 +63,17 @@ def _program(tokens: tuple[str, ...]) -> str:
 def _has_option(tokens: tuple[str, ...], *names: str) -> bool:
     lowered = {token.casefold() for token in tokens}
     return any(name.casefold() in lowered for name in names)
+
+
+def _git_read_option_requires_approval(tokens: tuple[str, ...]) -> str | None:
+    """Return the unsafe Git option that can cross a read-only trust boundary."""
+
+    for raw in tokens:
+        token = raw.casefold()
+        name = token.split("=", 1)[0]
+        if name in _GIT_UNSAFE_READ_OPTIONS:
+            return raw
+    return None
 
 
 def classify_command(argv: Iterable[str], project_root: Path | None = None) -> CommandDecision:
@@ -178,12 +201,31 @@ def classify_command(argv: Iterable[str], project_root: Path | None = None) -> C
 
     if program in {"git", "git.exe"} and len(tokens) > 1:
         subcommand = tokens[1].casefold()
+        if subcommand.startswith("-"):
+            return CommandDecision(
+                CommandClass.PROJECT_WRITE,
+                True,
+                ("Git global options can inject configuration, aliases, pagers, or other effects; fail closed",),
+            )
         if subcommand in _SAFE_GIT_SUBCOMMANDS:
+            unsafe_option = _git_read_option_requires_approval(tokens[2:])
+            if unsafe_option is not None:
+                return CommandDecision(
+                    CommandClass.PROJECT_WRITE,
+                    True,
+                    (f"Git read option {unsafe_option!r} can execute helpers, write output, or escape repository reads",),
+                )
             return CommandDecision(CommandClass.READ_ONLY, False, ())
+        if subcommand in _SAFE_GIT_PROJECT_WRITE_SUBCOMMANDS:
+            return CommandDecision(
+                CommandClass.PROJECT_WRITE,
+                False,
+                (f"Git built-in {subcommand!r} modifies only project repository state",),
+            )
         return CommandDecision(
             CommandClass.PROJECT_WRITE,
-            False,
-            (f"git subcommand {subcommand!r} may modify project state",),
+            True,
+            (f"unknown or higher-risk Git subcommand {subcommand!r} may be an alias or have destructive effects; fail closed",),
         )
 
     if program in _SAFE_READ_ONLY_COMMANDS:

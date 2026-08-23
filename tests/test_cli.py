@@ -95,6 +95,30 @@ def test_cli_rejects_implicit_and_supports_budget_override(
     assert state.budget.profile == "quick"
 
 
+def test_explicit_deep_budget_bypasses_repository_budget_profile(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    _call(capsys, ["--root", str(root), "init"])
+    (root / ".stackmarshal" / "config.toml").write_text('budget_profile = "deep"\n', encoding="utf-8")
+
+    code, payload = _call(
+        capsys,
+        [
+            "--root",
+            str(root),
+            "start",
+            "--invocation",
+            "$stackmarshal build explicit deep budget",
+            "--budget",
+            "deep",
+        ],
+    )
+    assert code == 0
+    state = load_state(root / ".stackmarshal" / "runs" / str(payload["run_id"]) / "run.json")
+    assert state.budget.profile == "deep"
+    assert state.budget.limits["tool_calls"] == 220
+
+
 def test_cli_full_transition_report_and_terminal_guard(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

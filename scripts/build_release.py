@@ -75,6 +75,22 @@ def normalized_time(epoch: int) -> datetime:
     return datetime.fromtimestamp(epoch, UTC).replace(microsecond=0)
 
 
+def safe_output_directory(root: Path, path: Path) -> Path:
+    """Return an existing repository-local output directory without following links/junctions."""
+
+    resolved_root = root.resolve(strict=True)
+    if path.is_symlink():
+        raise ValueError(f"Release output directory may not be a symlink: {path.relative_to(root)}")
+    if not path.exists():
+        if path.parent.resolve(strict=True) != resolved_root:
+            raise ValueError(f"Release output parent escapes repository root: {path.relative_to(root)}")
+        return path
+    resolved = path.resolve(strict=True)
+    if resolved.parent != resolved_root or not resolved.is_dir():
+        raise ValueError(f"Release output directory escapes repository root or is not a directory: {path.relative_to(root)}")
+    return path
+
+
 def safe_regular_file(root: Path, path: Path) -> Path:
     """Return a contained regular file without following repository symlinks."""
     resolved_root = root.resolve(strict=True)
@@ -116,11 +132,58 @@ def zip_tree(source: Path, destination: Path, prefix: str, epoch: int) -> None:
             )
 
 
-def tracked_files() -> list[Path]:
-    output = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True, timeout=30
+def _git_bytes(root: Path, *args: str) -> bytes:
+    return subprocess.run(
+        ["git", *args], cwd=root, check=True, capture_output=True, timeout=30
     ).stdout
+
+
+def tracked_files(root: Path = ROOT) -> list[Path]:
+    output = _git_bytes(root, "ls-files", "-z")
     return [Path(item.decode("utf-8")) for item in output.split(b"\0") if item]
+
+
+def validate_release_git_state(root: Path = ROOT) -> None:
+    """Reject Git state that can hide release inputs from ordinary clean-worktree checks."""
+
+    flags = _git_bytes(root, "ls-files", "-v", "-z")
+    unsafe_flags: list[str] = []
+    for raw in (item for item in flags.split(b"\0") if item):
+        text = raw.decode("utf-8", errors="surrogateescape")
+        if not text.startswith("H "):
+            unsafe_flags.append(text)
+    if unsafe_flags:
+        raise ValueError(
+            "Release inputs use hidden/nonstandard Git index flags; clear assume-unchanged/skip-worktree state: "
+            + ", ".join(unsafe_flags[:10])
+        )
+
+    ignored = _git_bytes(
+        root,
+        "ls-files",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "-z",
+        "--",
+        "src/stackmarshal",
+        "skills/stackmarshal",
+    )
+    contaminating: list[str] = []
+    for raw in (item for item in ignored.split(b"\0") if item):
+        name = raw.decode("utf-8", errors="surrogateescape").replace("\\", "/")
+        path = Path(name)
+        if "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}:
+            continue
+        if name.startswith("skills/stackmarshal/") or (
+            name.startswith("src/stackmarshal/")
+            and (path.suffix == ".py" or path.name == "py.typed" or ("data" in path.parts and path.suffix == ".toml"))
+        ):
+            contaminating.append(name)
+    if contaminating:
+        raise ValueError(
+            "Ignored files could contaminate release artifacts: " + ", ".join(sorted(contaminating)[:10])
+        )
 
 
 def validate_tracked_files() -> None:
@@ -212,13 +275,16 @@ def main() -> int:
     if not args.allow_dirty and git("status", "--porcelain"):
         raise SystemExit("Refusing to build a release from a dirty Git worktree")
 
+    if not args.allow_dirty:
+        validate_release_git_state(ROOT)
     validate_tracked_files()
     epoch = resolve_epoch(args.source_date_epoch)
     created_at = normalized_time(epoch).isoformat()
     git_head = git("rev-parse", "HEAD")
-    release = ROOT / "release"
-    dist = ROOT / "dist"
-    for directory in (release, dist):
+    build = safe_output_directory(ROOT, ROOT / "build")
+    release = safe_output_directory(ROOT, ROOT / "release")
+    dist = safe_output_directory(ROOT, ROOT / "dist")
+    for directory in (build, release, dist):
         if directory.exists():
             shutil.rmtree(directory)
     release.mkdir()

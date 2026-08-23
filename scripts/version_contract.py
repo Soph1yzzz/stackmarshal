@@ -18,16 +18,41 @@ README_VERSION_PATTERNS = (
 )
 
 
+def _safe_regular_file(root: Path, path: Path) -> Path:
+    """Resolve a version-contract file without following workspace-escape links."""
+
+    resolved_root = root.resolve(strict=True)
+    try:
+        relative = path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"Version-contract path escapes repository root: {path}") from exc
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError(f"Version-contract path may not be a symlink: {relative.as_posix()}")
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(f"Version-contract path is missing: {relative.as_posix()}") from exc
+    if resolved != resolved_root and resolved_root not in resolved.parents:
+        raise ValueError(f"Version-contract path escapes repository root: {relative.as_posix()}")
+    if not resolved.is_file():
+        raise ValueError(f"Version-contract path is not a regular file: {relative.as_posix()}")
+    return resolved
+
+
 def project_version(root: Path = ROOT) -> str:
-    with (root / "pyproject.toml").open("rb") as handle:
+    path = _safe_regular_file(root, root / "pyproject.toml")
+    with path.open("rb") as handle:
         value = tomllib.load(handle)["project"]["version"]
     if not isinstance(value, str) or re.fullmatch(SEMVER, value) is None:
         raise ValueError("[project].version must be a semantic version")
     return value
 
 
-def _versions(path: Path, pattern: str) -> list[str]:
-    text = path.read_text(encoding="utf-8")
+def _versions(root: Path, path: Path, pattern: str) -> list[str]:
+    text = _safe_regular_file(root, path).read_text(encoding="utf-8")
     return [match.group("version") for match in re.finditer(pattern, text, flags=re.MULTILINE)]
 
 
@@ -45,7 +70,7 @@ def component_versions(root: Path = ROOT) -> dict[str, str]:
     }
     resolved = {"project": current}
     for name, (path, pattern) in components.items():
-        found = _versions(path, pattern)
+        found = _versions(root, path, pattern)
         if len(found) != 1:
             raise ValueError(f"Expected exactly one {name} version declaration in {path.relative_to(root)}")
         resolved[name] = found[0]
@@ -59,7 +84,7 @@ def _living_document_versions(root: Path) -> dict[str, list[str]]:
     for path in (root / "README.md", root / "README.ja.md"):
         versions: list[str] = []
         for pattern in README_VERSION_PATTERNS:
-            versions.extend(_versions(path, pattern))
+            versions.extend(_versions(root, path, pattern))
         result[path.name] = versions
     return result
 
@@ -67,7 +92,7 @@ def _living_document_versions(root: Path) -> dict[str, list[str]]:
 def _skill_command_versions(root: Path) -> list[str]:
     path = root / "skills" / "stackmarshal" / "SKILL.md"
     # Keep the command check explicit because these literals are executed by a stale/new host session.
-    text = path.read_text(encoding="utf-8")
+    text = _safe_regular_file(root, path).read_text(encoding="utf-8")
     versions: list[str] = []
     for command in ("host-ready --version", "doctor --host-skill-version"):
         match = re.search(rf'{re.escape(command)} "(?P<version>{SEMVER})"', text)
@@ -127,8 +152,10 @@ def sync_version_mirrors(root: Path = ROOT) -> list[str]:
         root / "README.md": [(pattern, "__README_VERSION__") for pattern in README_VERSION_PATTERNS],
         root / "README.ja.md": [(pattern, "__README_VERSION__") for pattern in README_VERSION_PATTERNS],
     }
+    safe_paths = {path: _safe_regular_file(root, path) for path in replacements}
     for path, rules in replacements.items():
-        before = path.read_text(encoding="utf-8")
+        safe_path = safe_paths[path]
+        before = safe_path.read_text(encoding="utf-8")
         after = before
         for pattern, replacement in rules:
             if replacement == "__README_VERSION__":
@@ -142,7 +169,7 @@ def sync_version_mirrors(root: Path = ROOT) -> list[str]:
             else:
                 after = re.sub(pattern, replacement, after, flags=re.MULTILINE)
         if after != before:
-            path.write_text(after, encoding="utf-8", newline="\n")
+            safe_path.write_text(after, encoding="utf-8", newline="\n")
             changed.append(path.relative_to(root).as_posix())
     return changed
 

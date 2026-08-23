@@ -62,28 +62,46 @@ def _run_git_bytes(root: Path, *args: str) -> bytes:
 
 
 def _tree_fingerprint(root: Path, ignored_dirs: set[str]) -> str:
-    resolved = root.resolve()
+    resolved = root.resolve(strict=True)
+    if not resolved.is_dir():
+        raise ValueError(f"Workspace fingerprint root is not a directory: {root}")
     digest = hashlib.sha256()
-    for candidate in sorted(resolved.rglob("*"), key=lambda item: item.as_posix()):
-        try:
+    pending = [resolved]
+    visited_dirs = {resolved}
+    while pending:
+        directory = pending.pop()
+        children = sorted(directory.iterdir(), key=lambda item: item.name.casefold(), reverse=True)
+        for candidate in children:
             relative = candidate.relative_to(resolved)
-        except ValueError:
-            continue
-        if any(part in ignored_dirs for part in relative.parts):
-            continue
-        digest.update(relative.as_posix().encode("utf-8", errors="surrogateescape"))
-        digest.update(b"\0")
-        if candidate.is_symlink():
-            digest.update(b"symlink\0")
-            digest.update(str(candidate.readlink()).encode("utf-8", errors="surrogateescape"))
-        elif candidate.is_file():
-            digest.update(b"file\0")
-            with candidate.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
-        elif candidate.is_dir():
-            digest.update(b"dir\0")
-        digest.update(b"\0")
+            if any(part in ignored_dirs for part in relative.parts):
+                continue
+            digest.update(relative.as_posix().encode("utf-8", errors="surrogateescape"))
+            digest.update(b"\0")
+            if candidate.is_symlink():
+                digest.update(b"symlink\0")
+                digest.update(str(candidate.readlink()).encode("utf-8", errors="surrogateescape"))
+                digest.update(b"\0")
+                continue
+            try:
+                resolved_candidate = candidate.resolve(strict=True)
+            except OSError as exc:
+                raise ValueError(f"Workspace entry changed during fingerprint: {relative.as_posix()}") from exc
+            if resolved_candidate != resolved and resolved not in resolved_candidate.parents:
+                raise ValueError(f"Workspace entry escapes during fingerprint: {relative.as_posix()}")
+            if candidate.is_file():
+                digest.update(b"file\0")
+                with candidate.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(chunk)
+            elif candidate.is_dir():
+                if resolved_candidate in visited_dirs:
+                    raise ValueError(f"Workspace directory alias or cycle during fingerprint: {relative.as_posix()}")
+                visited_dirs.add(resolved_candidate)
+                digest.update(b"dir\0")
+                pending.append(candidate)
+            else:
+                raise ValueError(f"Workspace contains unsupported filesystem entry: {relative.as_posix()}")
+            digest.update(b"\0")
     return digest.hexdigest()
 
 
@@ -165,8 +183,8 @@ def worktree_fingerprint(root: Path) -> str | None:
         return workspace_fingerprint(resolved)
     digest = hashlib.sha256()
     for label, args in (
-        (b"tracked\0", ("diff", "--binary", "HEAD", "--")),
-        (b"staged\0", ("diff", "--binary", "--cached", "HEAD", "--")),
+        (b"tracked\0", ("diff", "--no-ext-diff", "--no-textconv", "--binary", "HEAD", "--")),
+        (b"staged\0", ("diff", "--no-ext-diff", "--no-textconv", "--binary", "--cached", "HEAD", "--")),
     ):
         digest.update(label)
         digest.update(_run_git_bytes(resolved, *args))
@@ -186,6 +204,12 @@ def worktree_fingerprint(root: Path) -> str | None:
             digest.update(b"symlink\0")
             digest.update(str(candidate.readlink()).encode("utf-8", errors="surrogateescape"))
         elif candidate.is_file():
+            try:
+                resolved_candidate = candidate.resolve(strict=True)
+            except OSError as exc:
+                raise ValueError(f"Untracked worktree path changed during fingerprint: {relative_text}") from exc
+            if resolved_candidate != resolved and resolved not in resolved_candidate.parents:
+                raise ValueError(f"Untracked worktree path escapes workspace: {relative_text}")
             digest.update(b"file\0")
             with candidate.open("rb") as handle:
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
