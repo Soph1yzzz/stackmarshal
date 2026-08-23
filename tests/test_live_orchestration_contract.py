@@ -248,7 +248,10 @@ def test_nested_workspace_live_orchestration_contract(
     else:
         code, unsafe_finalize = _call(capsys, ["--root", str(child), "finalize", "--run-id", run_id])
         assert code == EXIT_INVALID_STATE
-        assert any("temporary task graph" in str(error) for error in unsafe_finalize["errors"])
+        assert any(
+            "task-graph.json.tmp" in str(error) and "symlink" in str(error).casefold()
+            for error in unsafe_finalize["errors"]
+        )
         assert outside_tmp.read_text(encoding="utf-8") == "outside\n"
         temporary_graph.unlink()
 
