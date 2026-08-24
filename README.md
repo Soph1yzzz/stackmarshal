@@ -1,6 +1,83 @@
 # StackMarshal
 
-**Research the field. Marshal the stack. Ship with limits.**
+**A bounded, research-first agent harness for Codex.**
+
+Research the field. Marshal the stack. Ship with limits.
+
+StackMarshal turns open-ended Codex work into a bounded, auditable run. It helps Codex
+normalize the request, inspect the environment, research only when warranted, map reusable
+capabilities, evaluate trust and licensing, freeze an architecture, implement within explicit
+limits, verify mandatory acceptance criteria, and preserve a resumable checkpoint when a safe
+completion is not possible.
+
+> StackMarshal does not promise that every project will be completed. It promises a finite,
+> inspectable outcome: **`COMPLETE` with evidence, or a formal resumable stop.**
+
+[日本語 README](README.ja.md)
+
+## The 30-second version
+
+| Open-ended agent work | With StackMarshal |
+|---|---|
+| Starts coding before deciding whether research is needed | Runs an explicit research gate and capability map first |
+| Rebuilds existing tools or adds dependencies casually | Separates Skills, MCP, plugins, libraries, CLIs, and reference OSS, then evaluates trust before acquisition |
+| Drifts architecture while implementation is underway | Freezes the architecture and caps research re-entry |
+| Repeats failures until context or patience runs out | Enforces budgets, attempt limits, stagnation detection, and repeated-failure fingerprints |
+| Says "done" without a machine-checkable completion contract | Gates `COMPLETE` on canonical task evidence and verification |
+| Stops with context trapped in the chat | Leaves an integrity-protected checkpoint bound to repository state for deterministic resume |
+
+### What makes it different
+
+- **Bounded by construction.** The deterministic Core owns run state, budgets, stop conditions,
+  task evidence, and terminal states instead of relying on prompt discipline alone.
+- **Research-first, not research-always.** Small local work can skip research; larger work gets a
+  bounded field/capability pass before architecture is frozen.
+- **Security gates are part of the harness.** Publication, secrets, billing, privilege, global
+  writes, external binaries, and network writes remain approval boundaries; unknown command forms
+  fail closed.
+- **Resume is a first-class outcome.** HMAC-protected checkpoints bind decisions to repository
+  lineage and the exact worktree fingerprint so a stopped run can continue without pretending the
+  interruption never happened.
+- **Codex-specific adapter, agent-neutral Core.** v1 is deliberately not a multi-agent
+  orchestrator; the reusable state/policy model is separated from Codex-specific behavior.
+
+### Proven in dogfooding: RepoHealth
+
+In **Case Study #1**, Codex explicitly invoked StackMarshal in a controlled Phase 3B run and built
+RepoHealth, a dependency-free OSS-readiness CLI, from an almost-empty local workspace. The accepted
+run finished with:
+
+- **6 tests passed**
+- **Ruff PASS**
+- **strict mypy PASS**
+- **92% branch-aware coverage** against an 85% gate
+- **wheel + sdist build PASS**
+- **local wheel install smoke PASS**
+- terminal StackMarshal state: **`COMPLETE`**
+
+The same dogfood also exposed integration gaps instead of hiding them; those findings drove the
+v1.1 live-orchestration hardening. Read the full evidence and limitations in
+[Case Study #1 — RepoHealth](docs/CASE_STUDY_01_REPOHEALTH.md).
+
+### Install in one command
+
+**Windows PowerShell:**
+
+```powershell
+irm https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.ps1 | iex
+```
+
+**macOS / Linux:**
+
+```bash
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.sh | bash
+```
+
+The installer uses a dedicated virtual environment, installs the matching Codex Skill, verifies
+versioned Release assets, and runs a post-install doctor check. The detailed installation,
+security, CLI, state, release, and development contracts remain below.
+
+## Detailed overview
 
 StackMarshal is an open-source, research-first orchestration Skill and deterministic
 CLI for Codex. It helps Codex understand a request, inspect the current environment,
@@ -11,8 +88,6 @@ safe or possible.
 
 > StackMarshal does not promise that every project will be completed. It promises
 > bounded execution: `COMPLETE` with evidence, or a formal, resumable stop.
-
-[日本語 README](README.ja.md)
 
 ## Why
 

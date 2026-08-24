@@ -180,6 +180,22 @@ The experiment passed, but it revealed integration issues that unit/forward test
 
 These findings did not invalidate the generated artifact or the fact that the Skill was active before implementation, but they identify the next integration-hardening work. They are intentionally tracked outside the public repository in the local `Nextpatch.md` working note until implemented.
 
+## Postscript — v1.1 hardening
+
+The findings above are preserved as the historical record of the Phase 3B run. They describe the
+state of StackMarshal at the time of the experiment; they are not rewritten retroactively.
+
+The integration gaps identified by this dogfood were subsequently hardened in the v1.1 series.
+[v1.1.1](RELEASE_NOTES_v1.1.1.md) introduced one authoritative `RUNNING` run, explicit nested-repository
+bootstrap and first-commit lineage migration, live phase/workspace evidence, Core-owned observable
+activity and budget accounting, a canonical JSON task graph, and evidence-gated `COMPLETE` checks.
+[v1.1.2](RELEASE_NOTES_v1.1.2.md) retained those contracts, promoted the nested-workspace dogfood
+scenario into a permanent regression test, and added explicit finalization and terminal-integrity
+hardening around completion and release evidence.
+
+This postscript records the later remediation only; it does not alter the original experiment,
+its evidence, or its limitations.
+
 ## Generated-artifact follow-up
 
 RepoHealth itself built successfully, but setuptools emitted a non-blocking deprecation warning for the license metadata format in `pyproject.toml`. That should be modernized before RepoHealth is ever published as its own package.

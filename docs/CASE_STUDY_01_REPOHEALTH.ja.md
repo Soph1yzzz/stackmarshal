@@ -180,6 +180,21 @@ Final status：`COMPLETE`。
 
 これらは成果物の成立やSkillが実装前に動いていた事実を否定するものではありませんが、次のintegration hardening対象です。公開repositoryへはまだ載せず、local-onlyの`Nextpatch.md`に実装メモとして保存しています。
 
+## Postscript — v1.1でのhardening
+
+上記のfindingはPhase 3B実施当時の歴史的記録としてそのまま残します。後から当時の状態を
+書き換えたものではありません。
+
+このdogfoodingで見つかったintegration gapは、その後のv1.1系でhardeningされました。
+[v1.1.1](RELEASE_NOTES_v1.1.1.md)では、authoritativeな`RUNNING` runの一本化、nested repository
+bootstrapとfirst-commit lineage migrationの明示記録、live phase/workspace evidence、Core-ownedな
+observable activity / budget accounting、canonical JSON task graph、evidence-gated `COMPLETE`を導入しました。
+[v1.1.2](RELEASE_NOTES_v1.1.2.md)ではこれらのcontractを維持したまま、nested-workspace dogfood
+scenarioを恒久的なregression testへ昇格し、completionとrelease evidenceに対する明示的な
+finalization / terminal-integrity hardeningを追加しています。
+
+このPostscriptは後続remediationを記録するだけで、元の実験結果、証拠、留保条件は変更しません。
+
 ## 生成成果物側のfollow-up
 
 RepoHealthのbuild自体はPASSしていますが、`pyproject.toml`のlicense metadataについてsetuptoolsのnon-blocking deprecation warningが出ています。RepoHealth自体を将来公開する場合は、現行SPDX形式へ更新してから公開します。

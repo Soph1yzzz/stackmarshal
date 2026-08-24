@@ -1,6 +1,79 @@
 # StackMarshal
 
-**調べ、揃え、制御し、有限に作り切る。**
+**Codexのための、有限・Research First型Agent Harness。**
+
+調べ、揃え、制御し、有限に作り切る。
+
+StackMarshalは、終わりが曖昧になりやすいCodex作業を、有限で監査可能なrunへ変換します。
+依頼の構造化、環境監査、必要な場合だけの調査、既存Capabilityの整理、安全性とlicense評価、
+Architecture Freeze、明示的な上限内での実装、必須受け入れ条件の検証、安全に完了できない
+場合のcheckpoint/resumeまでを一つのHarnessとして扱います。
+
+> StackMarshalは「どんな依頼でも必ず完成」を保証しません。
+> 保証するのは、**証拠付きの`COMPLETE`か、正式かつ再開可能な有限停止**です。
+
+[English README](README.md)
+
+## 30秒で分かるStackMarshal
+
+| 終端が曖昧なAgent作業 | StackMarshalを使う場合 |
+|---|---|
+| 調査が必要か決める前に実装を始める | 明示的なResearch GateとCapability Mapを先に通す |
+| 既存Toolを再実装したり、依存を気軽に増やす | Skill / MCP / plugin / library / CLI / reference OSSを分離し、獲得前にtrustを評価する |
+| 実装途中でArchitectureが漂流する | Architecture Freezeを行い、再調査回数も上限化する |
+| 同じ失敗をcontext切れまで繰り返す | budget、task attempt、stagnation、failure fingerprintで有限化する |
+| 「終わった」と言うが完了条件が機械的に追えない | canonical task evidenceとverificationで`COMPLETE`をgateする |
+| Chatが止まると再開情報も消える | repository stateに束縛されたintegrity-protected checkpointを残す |
+
+### 他と何が違うか
+
+- **有限性をPromptだけに任せない**：決定論的Coreがrun state、budget、stop condition、
+  task evidence、terminal stateを管理します。
+- **Research FirstだがResearch Alwaysではない**：小さなlocal作業は調査を省略でき、必要な作業だけ
+  boundedなfield/capability調査を通してからArchitectureを凍結します。
+- **Security GateがHarness内にある**：publication、secret、billing、privilege、global write、
+  external binary、network writeは承認境界のままです。未知のcommand formもfail-closedします。
+- **停止を失敗扱いだけにしない**：HMACで保護されたcheckpointがrepository lineageと正確な
+  worktree fingerprintへ束縛され、停止後も再計算を避けてresumeできます。
+- **Codex専用Adapter + Agent非依存Core**：v1はmulti-agent orchestratorではありません。
+  Codex固有挙動をAdapter/Skillへ分離し、Core側は状態・Policy Modelを再利用可能にしています。
+
+### Dogfooding実証：RepoHealth
+
+**Case Study #1**では、CodexがStackMarshalを明示起動し、ほぼ空のlocal workspaceから
+runtime dependency 0のOSS-readiness CLI「RepoHealth」を構築しました。採用runの結果は次の通りです。
+
+- **tests 6 passed**
+- **Ruff PASS**
+- **strict mypy PASS**
+- **branch-aware coverage 92%**（gate 85%）
+- **wheel + sdist build PASS**
+- **local wheel install smoke PASS**
+- StackMarshal terminal state：**`COMPLETE`**
+
+さらに、このdogfoodingは都合の悪いintegration gapも隠さず露出させ、その後のv1.1系
+live-orchestration hardeningへ直接つながりました。証拠・留保・remote CI未実行条件を含む完全な記録は
+[Case Study #1 — RepoHealth 日本語版](docs/CASE_STUDY_01_REPOHEALTH.ja.md)を参照してください。
+
+### 1コマンドで導入
+
+**Windows PowerShell：**
+
+```powershell
+irm https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.ps1 | iex
+```
+
+**macOS / Linux：**
+
+```bash
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.sh | bash
+```
+
+installerは専用virtual environmentへCLIを隔離導入し、対応するCodex Skillを配置し、versioned
+Release assetsを検証してpost-install doctorまで実行します。詳細な導入、Security、CLI、state、
+release、development contractは以下の既存説明を維持しています。
+
+## 詳細概要
 
 StackMarshalは、Codex向けのResearch First型オーケストレーションSkillと、
 決定論的な補助CLIです。依頼の構造化、環境監査、類似OSS調査、Skills・MCP・
@@ -9,8 +82,6 @@ StackMarshalは、Codex向けのResearch First型オーケストレーションS
 
 > StackMarshalは「どんな依頼でも必ず完成」を保証しません。
 > **証拠付きの`COMPLETE`か、正式かつ再開可能な停止状態**を保証します。
-
-[English README](README.md)
 
 ## なぜ必要か
 
