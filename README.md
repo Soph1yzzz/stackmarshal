@@ -1,21 +1,51 @@
-# StackMarshal
+<p align="center">
+  <a href="README.ja.md"><strong>日本語</strong></a> · <strong>English</strong>
+</p>
 
-**A bounded, research-first agent harness for Codex.**
+<p align="center">
+  <img src="docs/assets/stackmarshal-readme-hero.svg" alt="StackMarshal — bounded research-first agent harness for Codex" width="100%" />
+</p>
 
-Research the field. Marshal the stack. Ship with limits.
+<h1 align="center">StackMarshal</h1>
 
-StackMarshal turns open-ended Codex work into a bounded, auditable run. It helps Codex
-normalize the request, inspect the environment, research only when warranted, map reusable
-capabilities, evaluate trust and licensing, freeze an architecture, implement within explicit
-limits, verify mandatory acceptance criteria, and preserve a resumable checkpoint when a safe
-completion is not possible.
+<p align="center"><strong>A bounded, research-first agent harness for Codex.</strong></p>
+<p align="center">Research the field. Marshal the stack. Ship with limits.</p>
+
+<p align="center">
+  <a href="https://github.com/Soph1yzzz/stackmarshal/releases/latest"><img src="https://img.shields.io/github/v/release/Soph1yzzz/stackmarshal?style=flat-square&amp;label=release&amp;color=6f8cff" alt="Latest release" /></a>
+  <a href="https://github.com/Soph1yzzz/stackmarshal/actions/workflows/ci.yml"><img src="https://github.com/Soph1yzzz/stackmarshal/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://github.com/Soph1yzzz/stackmarshal/actions/workflows/codeql.yml"><img src="https://github.com/Soph1yzzz/stackmarshal/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL" /></a>
+  <img src="https://img.shields.io/badge/Python-3.11--3.13-3776AB?style=flat-square&amp;logo=python&amp;logoColor=white" alt="Python 3.11 to 3.13" />
+  <img src="https://img.shields.io/badge/Codex-Agent%20Skill-111827?style=flat-square" alt="Codex Agent Skill" />
+  <img src="https://img.shields.io/badge/runtime%20deps-0-22c55e?style=flat-square" alt="Zero runtime dependencies" />
+  <img src="https://img.shields.io/badge/license-Apache--2.0-0ea5e9?style=flat-square" alt="Apache 2.0" />
+</p>
+
+<p align="center">
+  <strong><a href="#install-in-one-command">Install</a></strong> ·
+  <strong><a href="docs/CASE_STUDY_01_REPOHEALTH.md">Proof</a></strong> ·
+  <strong><a href="docs/ARCHITECTURE.md">Architecture</a></strong> ·
+  <strong><a href="docs/THREAT_MODEL.md">Security</a></strong> ·
+  <strong><a href="docs/README.md">Docs</a></strong>
+</p>
+
+StackMarshal turns open-ended Codex work into a **bounded, auditable run**. It normalizes the
+request, researches only when warranted, maps reusable capabilities, evaluates trust, freezes the
+architecture, implements within explicit limits, verifies mandatory acceptance criteria, and leaves
+a resumable checkpoint when safe completion is not possible.
 
 > StackMarshal does not promise that every project will be completed. It promises a finite,
 > inspectable outcome: **`COMPLETE` with evidence, or a formal resumable stop.**
 
-[日本語 README](README.ja.md)
-
 ## The 30-second version
+
+<table>
+  <tr>
+    <td width="33%"><strong>BOUND THE RUN</strong><br/>Budgets, attempts, stagnation, and terminal states keep work finite.</td>
+    <td width="33%"><strong>PROVE COMPLETION</strong><br/>Canonical task evidence and verification gate <code>COMPLETE</code>.</td>
+    <td width="33%"><strong>RESUME SAFELY</strong><br/>Integrity-protected checkpoints bind decisions to repository state.</td>
+  </tr>
+</table>
 
 | Open-ended agent work | With StackMarshal |
 |---|---|
@@ -42,6 +72,10 @@ completion is not possible.
   orchestrator; the reusable state/policy model is separated from Codex-specific behavior.
 
 ### Proven in dogfooding: RepoHealth
+
+<p align="center">
+  <a href="docs/CASE_STUDY_01_REPOHEALTH.md"><img src="docs/assets/stackmarshal-repohealth-proof.svg" alt="RepoHealth Case Study #1 proof panel" width="100%" /></a>
+</p>
 
 In **Case Study #1**, Codex explicitly invoked StackMarshal in a controlled Phase 3B run and built
 RepoHealth, a dependency-free OSS-readiness CLI, from an almost-empty local workspace. The accepted

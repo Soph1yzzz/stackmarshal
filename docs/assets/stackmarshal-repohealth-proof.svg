@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="330" viewBox="0 0 1200 330" role="img" aria-labelledby="title desc">
+  <title id="title">RepoHealth case study proof panel</title>
+  <desc id="desc">A proof panel summarizing the accepted StackMarshal RepoHealth dogfooding run and its measured local verification results.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#091522"/>
+      <stop offset="1" stop-color="#0e1b2c"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#58d7ff"/>
+      <stop offset="0.55" stop-color="#7e8fff"/>
+      <stop offset="1" stop-color="#52e0ab"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="330" rx="24" fill="url(#bg)"/>
+  <rect x="1" y="1" width="1198" height="328" rx="23" fill="none" stroke="#8eaaca" stroke-opacity="0.18"/>
+  <g font-family="system-ui,-apple-system,'Segoe UI',sans-serif">
+    <text x="54" y="50" fill="#6f8ba8" font-size="13" font-weight="800" letter-spacing="1.8">CASE STUDY #1 / REPOHEALTH</text>
+    <text x="54" y="86" fill="#eff7ff" font-size="27" font-weight="800">A real dogfood run, not a product mockup.</text>
+    <text x="54" y="113" fill="#9eb3c8" font-size="15">Almost-empty local workspace → bounded implementation → evidence-gated terminal state.</text>
+
+    <g transform="translate(54 144)">
+      <rect width="158" height="72" rx="15" fill="#0b2232" stroke="#56cdec" stroke-opacity="0.42"/>
+      <text x="79" y="31" text-anchor="middle" fill="#6fdcff" font-size="12" font-weight="800">START</text>
+      <text x="79" y="53" text-anchor="middle" fill="#dcecff" font-size="14" font-weight="700">almost empty</text>
+      <path d="M172 36H252" stroke="url(#line)" stroke-width="3"/>
+      <path d="m245 29 10 7-10 7" fill="none" stroke="#7c93ff" stroke-width="3"/>
+      <rect x="268" width="184" height="72" rx="15" fill="#151d38" stroke="#788aff" stroke-opacity="0.46"/>
+      <text x="360" y="31" text-anchor="middle" fill="#9aa7ff" font-size="12" font-weight="800">STACKMARSHAL</text>
+      <text x="360" y="53" text-anchor="middle" fill="#e6e9ff" font-size="14" font-weight="700">bounded build</text>
+      <path d="M466 36H546" stroke="url(#line)" stroke-width="3"/>
+      <path d="m539 29 10 7-10 7" fill="none" stroke="#69d2d8" stroke-width="3"/>
+      <rect x="562" width="172" height="72" rx="15" fill="#102c28" stroke="#57dfae" stroke-opacity="0.55"/>
+      <text x="648" y="31" text-anchor="middle" fill="#78e9be" font-size="12" font-weight="800">TERMINAL STATE</text>
+      <text x="648" y="54" text-anchor="middle" fill="#dffaf0" font-size="17" font-weight="800">COMPLETE ✓</text>
+    </g>
+
+    <g transform="translate(810 40)">
+      <rect width="336" height="204" rx="18" fill="#08131f" stroke="#7996b5" stroke-opacity="0.2"/>
+      <text x="22" y="32" fill="#7d97b2" font-size="12" font-weight="800" letter-spacing="1.4">LOCAL VERIFICATION</text>
+      <g font-size="14">
+        <text x="22" y="67" fill="#dfeaf6">Tests</text><text x="314" y="67" text-anchor="end" fill="#80edc5" font-weight="800">6 passed</text>
+        <text x="22" y="96" fill="#dfeaf6">Ruff</text><text x="314" y="96" text-anchor="end" fill="#80edc5" font-weight="800">PASS</text>
+        <text x="22" y="125" fill="#dfeaf6">strict mypy</text><text x="314" y="125" text-anchor="end" fill="#80edc5" font-weight="800">PASS</text>
+        <text x="22" y="154" fill="#dfeaf6">Branch coverage</text><text x="314" y="154" text-anchor="end" fill="#9ce8ff" font-weight="800">92% / 85% gate</text>
+        <text x="22" y="183" fill="#dfeaf6">Build + install smoke</text><text x="314" y="183" text-anchor="end" fill="#80edc5" font-weight="800">PASS</text>
+      </g>
+    </g>
+
+    <rect x="54" y="250" width="1092" height="1" fill="#7997b8" opacity="0.18"/>
+    <circle cx="61" cy="284" r="5" fill="#f0c25f"/>
+    <text x="76" y="289" fill="#a7b8ca" font-size="13">Dogfooding also exposed integration gaps; those findings drove the v1.1 hardening series.</text>
+    <text x="1146" y="289" text-anchor="end" fill="#71889f" font-size="12">Remote CI matrix was intentionally not executed in the case study.</text>
+  </g>
+</svg>

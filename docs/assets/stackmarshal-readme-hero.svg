@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+  <title id="title">StackMarshal — bounded research-first agent harness for Codex</title>
+  <desc id="desc">Dark control-plane style hero showing the bounded StackMarshal workflow from research to verification and either evidence-gated complete or resumable checkpoint.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="0.55" stop-color="#0a1728"/>
+      <stop offset="1" stop-color="#101f35"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#59d7ff"/>
+      <stop offset="1" stop-color="#7c8cff"/>
+    </linearGradient>
+    <linearGradient id="ok" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#47e6a1"/>
+      <stop offset="1" stop-color="#7ef0c0"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#9fc7ff" stroke-opacity="0.055" stroke-width="1"/>
+    </pattern>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="560" rx="28" fill="url(#bg)"/>
+  <rect width="1200" height="560" rx="28" fill="url(#grid)"/>
+  <rect x="1" y="1" width="1198" height="558" rx="27" fill="none" stroke="#88a9d6" stroke-opacity="0.18"/>
+
+  <circle cx="1060" cy="70" r="170" fill="#5174ff" opacity="0.08" filter="url(#glow)"/>
+  <circle cx="120" cy="520" r="210" fill="#33d5ff" opacity="0.055" filter="url(#glow)"/>
+
+  <g font-family="system-ui,-apple-system,'Segoe UI',sans-serif">
+    <rect x="64" y="54" width="348" height="34" rx="17" fill="#10243a" stroke="#5ccfff" stroke-opacity="0.45"/>
+    <circle cx="84" cy="71" r="5" fill="#5cdbff"/>
+    <text x="98" y="77" fill="#9fddf3" font-size="14" font-weight="700" letter-spacing="1.5">RESEARCH-FIRST AGENT HARNESS FOR CODEX</text>
+
+    <text x="64" y="164" fill="#f5f9ff" font-size="66" font-weight="800" letter-spacing="1">STACKMARSHAL</text>
+    <rect x="64" y="184" width="560" height="5" rx="2.5" fill="url(#accent)"/>
+    <text x="64" y="234" fill="#c6d5ea" font-size="24" font-weight="500">Bound open-ended agent work. Preserve proof. Resume safely.</text>
+
+    <g transform="translate(64 270)">
+      <rect width="172" height="38" rx="10" fill="#0d2335" stroke="#3fbce8" stroke-opacity="0.55"/>
+      <text x="86" y="25" text-anchor="middle" fill="#aee8ff" font-size="13" font-weight="700" letter-spacing="1">BOUNDED EXECUTION</text>
+      <rect x="184" width="174" height="38" rx="10" fill="#141f3c" stroke="#8291ff" stroke-opacity="0.55"/>
+      <text x="271" y="25" text-anchor="middle" fill="#c9ceff" font-size="13" font-weight="700" letter-spacing="1">EVIDENCE GATED</text>
+      <rect x="370" width="178" height="38" rx="10" fill="#102c28" stroke="#55dbac" stroke-opacity="0.55"/>
+      <text x="459" y="25" text-anchor="middle" fill="#b8f5df" font-size="13" font-weight="700" letter-spacing="1">RESUMABLE STATE</text>
+    </g>
+
+    <g transform="translate(64 356)" font-family="ui-monospace,SFMono-Regular,Consolas,monospace">
+      <rect x="0" y="0" width="134" height="54" rx="13" fill="#0d1b2b" stroke="#5fcfff" stroke-opacity="0.45"/>
+      <text x="67" y="22" text-anchor="middle" fill="#71dbff" font-size="12" font-weight="700">01</text>
+      <text x="67" y="40" text-anchor="middle" fill="#eef7ff" font-size="15" font-weight="700">RESEARCH</text>
+      <path d="M144 27H174" stroke="#66839f" stroke-width="2"/>
+      <path d="m169 22 7 5-7 5" fill="none" stroke="#66839f" stroke-width="2"/>
+
+      <rect x="184" y="0" width="134" height="54" rx="13" fill="#0d1b2b" stroke="#7588ff" stroke-opacity="0.52"/>
+      <text x="251" y="22" text-anchor="middle" fill="#9aa6ff" font-size="12" font-weight="700">02</text>
+      <text x="251" y="40" text-anchor="middle" fill="#eef0ff" font-size="15" font-weight="700">FREEZE</text>
+      <path d="M328 27H358" stroke="#66839f" stroke-width="2"/>
+      <path d="m353 22 7 5-7 5" fill="none" stroke="#66839f" stroke-width="2"/>
+
+      <rect x="368" y="0" width="134" height="54" rx="13" fill="#0d1b2b" stroke="#7588ff" stroke-opacity="0.52"/>
+      <text x="435" y="22" text-anchor="middle" fill="#9aa6ff" font-size="12" font-weight="700">03</text>
+      <text x="435" y="40" text-anchor="middle" fill="#eef0ff" font-size="15" font-weight="700">BUILD</text>
+      <path d="M512 27H542" stroke="#66839f" stroke-width="2"/>
+      <path d="m537 22 7 5-7 5" fill="none" stroke="#66839f" stroke-width="2"/>
+
+      <rect x="552" y="0" width="134" height="54" rx="13" fill="#0d1b2b" stroke="#a26fff" stroke-opacity="0.55"/>
+      <text x="619" y="22" text-anchor="middle" fill="#c0a0ff" font-size="12" font-weight="700">04</text>
+      <text x="619" y="40" text-anchor="middle" fill="#f3edff" font-size="15" font-weight="700">VERIFY</text>
+
+      <path d="M696 27H742" stroke="#66839f" stroke-width="2"/>
+      <path d="m737 22 7 5-7 5" fill="none" stroke="#66839f" stroke-width="2"/>
+
+      <rect x="752" y="-12" width="170" height="40" rx="12" fill="#0e3027" stroke="#59e6b1" stroke-opacity="0.65"/>
+      <text x="837" y="13" text-anchor="middle" fill="#8ff0cc" font-size="14" font-weight="800">COMPLETE ✓</text>
+      <rect x="752" y="36" width="170" height="40" rx="12" fill="#2b2311" stroke="#f3c45b" stroke-opacity="0.6"/>
+      <text x="837" y="61" text-anchor="middle" fill="#f4d58a" font-size="14" font-weight="800">CHECKPOINT ↺</text>
+    </g>
+
+    <g transform="translate(910 62)">
+      <rect width="226" height="228" rx="20" fill="#091421" fill-opacity="0.78" stroke="#8aabd0" stroke-opacity="0.22"/>
+      <text x="22" y="34" fill="#8ca4bf" font-size="12" font-weight="800" letter-spacing="1.6">CONTROL PLANE</text>
+      <line x1="22" y1="50" x2="204" y2="50" stroke="#708cab" stroke-opacity="0.22"/>
+      <text x="22" y="83" fill="#7188a0" font-size="13">RUN OWNER</text>
+      <text x="204" y="83" text-anchor="end" fill="#e8f2ff" font-size="14" font-weight="700">1 authoritative</text>
+      <text x="22" y="116" fill="#7188a0" font-size="13">BUDGET</text>
+      <text x="204" y="116" text-anchor="end" fill="#9ce8ff" font-size="14" font-weight="700">finite</text>
+      <text x="22" y="149" fill="#7188a0" font-size="13">EVIDENCE</text>
+      <text x="204" y="149" text-anchor="end" fill="#b8f1df" font-size="14" font-weight="700">required</text>
+      <text x="22" y="182" fill="#7188a0" font-size="13">UNKNOWN / UNSAFE</text>
+      <text x="204" y="182" text-anchor="end" fill="#ffd78a" font-size="14" font-weight="700">fail closed</text>
+      <circle cx="24" cy="208" r="4" fill="#55dfae"/>
+      <text x="37" y="213" fill="#9db1c6" font-size="12">deterministic Core + Codex adapter</text>
+    </g>
+
+    <text x="64" y="520" fill="#7188a0" font-size="13" letter-spacing="0.8">STATE • BUDGETS • SECURITY GATES • TASK EVIDENCE • CHECKPOINT / RESUME</text>
+    <text x="1136" y="520" text-anchor="end" fill="#6f86a0" font-size="13">v1.1.2</text>
+  </g>
+</svg>

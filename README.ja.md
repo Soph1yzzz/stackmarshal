@@ -1,20 +1,51 @@
-# StackMarshal
+<p align="center">
+  <strong>日本語</strong> · <a href="README.md"><strong>English</strong></a>
+</p>
 
-**Codexのための、有限・Research First型Agent Harness。**
+<p align="center">
+  <img src="docs/assets/stackmarshal-readme-hero.svg" alt="StackMarshal — Codexのための有限・Research First型Agent Harness" width="100%" />
+</p>
 
-調べ、揃え、制御し、有限に作り切る。
+<h1 align="center">StackMarshal</h1>
 
-StackMarshalは、終わりが曖昧になりやすいCodex作業を、有限で監査可能なrunへ変換します。
-依頼の構造化、環境監査、必要な場合だけの調査、既存Capabilityの整理、安全性とlicense評価、
-Architecture Freeze、明示的な上限内での実装、必須受け入れ条件の検証、安全に完了できない
-場合のcheckpoint/resumeまでを一つのHarnessとして扱います。
+<p align="center"><strong>Codexのための、有限・Research First型Agent Harness。</strong></p>
+<p align="center">調べ、揃え、制御し、有限に作り切る。</p>
+
+<p align="center">
+  <a href="https://github.com/Soph1yzzz/stackmarshal/releases/latest"><img src="https://img.shields.io/github/v/release/Soph1yzzz/stackmarshal?style=flat-square&amp;label=release&amp;color=6f8cff" alt="Latest release" /></a>
+  <a href="https://github.com/Soph1yzzz/stackmarshal/actions/workflows/ci.yml"><img src="https://github.com/Soph1yzzz/stackmarshal/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://github.com/Soph1yzzz/stackmarshal/actions/workflows/codeql.yml"><img src="https://github.com/Soph1yzzz/stackmarshal/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL" /></a>
+  <img src="https://img.shields.io/badge/Python-3.11--3.13-3776AB?style=flat-square&amp;logo=python&amp;logoColor=white" alt="Python 3.11から3.13" />
+  <img src="https://img.shields.io/badge/Codex-Agent%20Skill-111827?style=flat-square" alt="Codex Agent Skill" />
+  <img src="https://img.shields.io/badge/runtime%20deps-0-22c55e?style=flat-square" alt="Runtime依存ゼロ" />
+  <img src="https://img.shields.io/badge/license-Apache--2.0-0ea5e9?style=flat-square" alt="Apache 2.0" />
+</p>
+
+<p align="center">
+  <strong><a href="#1コマンドで導入">Install</a></strong> ·
+  <strong><a href="docs/CASE_STUDY_01_REPOHEALTH.ja.md">実証</a></strong> ·
+  <strong><a href="docs/ARCHITECTURE.md">Architecture</a></strong> ·
+  <strong><a href="docs/THREAT_MODEL.md">Security</a></strong> ·
+  <strong><a href="docs/README.md">Docs</a></strong>
+</p>
+
+StackMarshalは、終わりが曖昧になりやすいCodex作業を**有限で監査可能なrun**へ変換します。
+必要な場合だけ調査し、既存Capabilityを整理し、trustを評価し、Architectureを凍結し、明示的な
+上限内で実装し、必須受け入れ条件を検証します。安全に完了できない場合は、再開可能な
+checkpointを残します。
 
 > StackMarshalは「どんな依頼でも必ず完成」を保証しません。
 > 保証するのは、**証拠付きの`COMPLETE`か、正式かつ再開可能な有限停止**です。
 
-[English README](README.md)
-
 ## 30秒で分かるStackMarshal
+
+<table>
+  <tr>
+    <td width="33%"><strong>RUNを有限化</strong><br/>budget、attempt、stagnation、terminal stateで作業をboundedに保ちます。</td>
+    <td width="33%"><strong>完了を証明</strong><br/>canonical task evidenceとverificationが<code>COMPLETE</code>をgateします。</td>
+    <td width="33%"><strong>安全に再開</strong><br/>integrity-protected checkpointが判断をrepository stateへ束縛します。</td>
+  </tr>
+</table>
 
 | 終端が曖昧なAgent作業 | StackMarshalを使う場合 |
 |---|---|
@@ -39,6 +70,10 @@ Architecture Freeze、明示的な上限内での実装、必須受け入れ条�
   Codex固有挙動をAdapter/Skillへ分離し、Core側は状態・Policy Modelを再利用可能にしています。
 
 ### Dogfooding実証：RepoHealth
+
+<p align="center">
+  <a href="docs/CASE_STUDY_01_REPOHEALTH.ja.md"><img src="docs/assets/stackmarshal-repohealth-proof.svg" alt="RepoHealth Case Study #1 実証パネル" width="100%" /></a>
+</p>
 
 **Case Study #1**では、CodexがStackMarshalを明示起動し、ほぼ空のlocal workspaceから
 runtime dependency 0のOSS-readiness CLI「RepoHealth」を構築しました。採用runの結果は次の通りです。
