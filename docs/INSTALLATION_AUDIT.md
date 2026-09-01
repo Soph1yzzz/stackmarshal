@@ -95,6 +95,22 @@ The CI matrix runs the complete suite on Windows, macOS, and Ubuntu with Python 
 3.13. On Python 3.11 for each OS, CI also builds the complete Release asset set and performs a
 fresh one-command bootstrap smoke test against a temporary local Release server.
 
+## v1.1.3 runtime provenance addendum
+
+MandateMarshal field dogfooding exposed a separate post-install risk: more than one StackMarshal
+launcher/package/Skill version can coexist on a development machine even when each individual
+installation path is internally valid.
+
+v1.1.3 therefore expands `stackmarshal doctor` beyond the original CLI/Skill readiness comparison.
+It now inventories the active CLI entrypoint, managed installer state, PATH-resolved command,
+additional StackMarshal launcher candidates, and nearby installed-distribution version metadata.
+Known disagreement is reported as `version_skew` and requires repair before doctor returns ready.
+
+The inventory is deliberately non-executing for sibling PATH candidates. StackMarshal does not run
+an arbitrary executable merely because it is named `stackmarshal`; version evidence is derived
+from the current invocation, installer-managed launcher text/state, and bounded package metadata
+inspection. This keeps doctor from widening the supply-chain trust boundary while diagnosing it.
+
 ## Residual limitations
 
 - The first bootstrap script is trusted through HTTPS delivery from the GitHub Release. It then

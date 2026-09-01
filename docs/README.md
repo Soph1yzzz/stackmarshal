@@ -8,7 +8,8 @@ Start with [ARCHITECTURE.md](ARCHITECTURE.md) for the Core/adapter/Skill split, 
 
 ## Case Study
 
-Read [Case Study #1 — RepoHealth](CASE_STUDY_01_REPOHEALTH.md) for the controlled Phase 3B dogfooding evidence, including what passed, what did not run remotely, and which integration gaps were discovered. A [Japanese version](CASE_STUDY_01_REPOHEALTH.ja.md) is also available.
+- [Case Study #1 — RepoHealth](CASE_STUDY_01_REPOHEALTH.md) records the controlled Phase 3B dogfooding evidence, including what passed, what did not run remotely, and which integration gaps were discovered. A [Japanese version](CASE_STUDY_01_REPOHEALTH.ja.md) is also available.
+- [Case Study #2 — MandateMarshal v0.2](CASE_STUDY_02_MANDATEMARSHAL.md) records field use during durable-runtime/crash-recovery development, including a real stale-verification rejection and the runtime-trust defects that drove v1.1.3. A [Japanese version](CASE_STUDY_02_MANDATEMARSHAL.ja.md) is also available.
 
 ## Security
 
@@ -24,7 +25,8 @@ Use [REQUIREMENTS_TRACEABILITY.md](REQUIREMENTS_TRACEABILITY.md) to map requirem
 ## Release
 
 - [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) — current release process and required gates.
-- [RELEASE_NOTES_v1.1.2.md](RELEASE_NOTES_v1.1.2.md) — current v1.1.2 release and terminal-integrity hardening.
+- [RELEASE_NOTES_v1.1.3.md](RELEASE_NOTES_v1.1.3.md) — v1.1.3 runtime-trust hardening derived from MandateMarshal field use.
+- [RELEASE_NOTES_v1.1.2.md](RELEASE_NOTES_v1.1.2.md) — v1.1.2 release and terminal-integrity hardening.
 - [RELEASE_NOTES_v1.1.1.md](RELEASE_NOTES_v1.1.1.md) — RepoHealth-driven live-orchestration hardening.
 - [RELEASE_NOTES_v1.1.0.md](RELEASE_NOTES_v1.1.0.md) and [RELEASE_NOTES_v1.0.0.md](RELEASE_NOTES_v1.0.0.md) — earlier release history.
 

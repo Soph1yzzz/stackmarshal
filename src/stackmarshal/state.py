@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -14,6 +15,14 @@ from .constants import Mode, Phase, SCHEMA_VERSION, Status
 from .models import BudgetState, Invocation, ProjectInfo, RunState
 
 RUN_ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
+WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{number}" for number in range(1, 10)),
+    *(f"LPT{number}" for number in range(1, 10)),
+}
 
 
 _ALLOWED_TRANSITIONS: dict[Phase, set[Phase]] = {
@@ -48,7 +57,29 @@ def _run_git(root: Path, *args: str) -> str | None:
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return result.stdout.strip()
+    # Git porcelain output uses leading spaces as status columns. Remove only
+    # subprocess line terminators; generic strip() would corrupt that syntax.
+    return result.stdout.rstrip("\r\n")
+
+
+def _windows_reserved_component(path: Path) -> str | None:
+    for part in path.parts:
+        normalized = part.rstrip(" .")
+        stem = normalized.split(".", 1)[0].upper()
+        if stem in WINDOWS_RESERVED_NAMES:
+            return part
+    return None
+
+
+def _validate_fingerprint_path(relative: Path, *, platform_name: str = os.name) -> None:
+    if platform_name != "nt":
+        return
+    reserved = _windows_reserved_component(relative)
+    if reserved is not None:
+        raise ValueError(
+            "Workspace contains Windows reserved device name during fingerprint: "
+            f"{relative.as_posix()} (reserved component: {reserved})"
+        )
 
 
 def _run_git_bytes(root: Path, *args: str) -> bytes:
@@ -75,6 +106,7 @@ def _tree_fingerprint(root: Path, ignored_dirs: set[str]) -> str:
             relative = candidate.relative_to(resolved)
             if any(part in ignored_dirs for part in relative.parts):
                 continue
+            _validate_fingerprint_path(relative)
             digest.update(relative.as_posix().encode("utf-8", errors="surrogateescape"))
             digest.update(b"\0")
             if candidate.is_symlink():

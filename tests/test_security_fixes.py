@@ -16,7 +16,25 @@ from stackmarshal.config import default_config
 from stackmarshal.constants import CommandClass, Mode, Status
 from stackmarshal.integrity import sign_record, signing_key_path
 from stackmarshal.security import classify_command
-from stackmarshal.state import create_run, project_info, terminal_workspace_fingerprint, workspace_fingerprint
+from stackmarshal.state import (
+    _validate_fingerprint_path,
+    _windows_reserved_component,
+    create_run,
+    project_info,
+    terminal_workspace_fingerprint,
+    workspace_fingerprint,
+)
+
+
+def test_windows_reserved_device_name_detection_is_component_aware() -> None:
+    assert _windows_reserved_component(Path("NUL")) == "NUL"
+    assert _windows_reserved_component(Path("nested") / "nul.txt") == "nul.txt"
+    assert _windows_reserved_component(Path("COM1.")) == "COM1."
+    assert _windows_reserved_component(Path("safe") / "null.txt") is None
+    assert _windows_reserved_component(Path("safe") / "COM10.txt") is None
+    with pytest.raises(ValueError, match=r"Windows reserved device name.*nested/NUL\.txt"):
+        _validate_fingerprint_path(Path("nested") / "NUL.txt", platform_name="nt")
+    _validate_fingerprint_path(Path("nested") / "NUL.txt", platform_name="posix")
 
 
 def test_command_classification_fails_closed_for_unknown_and_variants() -> None:

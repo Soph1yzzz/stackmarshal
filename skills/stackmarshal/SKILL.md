@@ -8,7 +8,7 @@ description: >
   "使用 StackMarshal 实现", or "$stackmarshal". Do not use for ordinary coding
   requests, explanations, comparisons, or text edits that merely mention the name.
 metadata:
-  version: "1.1.2"
+  version: "1.1.3"
 ---
 
 # StackMarshal
@@ -20,7 +20,7 @@ convergence: either `COMPLETE` with evidence or a formal, resumable stop.
 
 Before any work, verify host readiness and invocation in this order:
 
-1. Run `python scripts/stackmarshal_core.py host-ready --version "1.1.2"`.
+1. Run `python scripts/stackmarshal_core.py host-ready --version "1.1.3"`.
    The installer leaves a restart-pending marker outside the Skill directory. Only a
    matching newly loaded Skill may acknowledge and clear it. If this command reports
    `ready: false`, stop with `INVALID_STATE` and require a Codex restart.
@@ -31,7 +31,7 @@ Before any work, verify host readiness and invocation in this order:
    is not triggered, stop this skill and answer normally. A stale pre-restart Skill
    still invokes the replaced on-disk fallback; while the marker exists, that fallback
    refuses invocation with `restart_required` instead of silently emulating the new Skill.
-4. Run `stackmarshal doctor --host-skill-version "1.1.2"` before project work. A Skill,
+4. Run `stackmarshal doctor --host-skill-version "1.1.3"` before project work. A Skill,
    CLI, or host-version mismatch is `INVALID_STATE`.
 
 Never infer invocation from an ordinary coding request. Never invoke StackMarshal recursively.

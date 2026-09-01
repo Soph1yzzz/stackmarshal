@@ -90,6 +90,17 @@ runtime dependency 0のOSS-readiness CLI「RepoHealth」を構築しました。
 live-orchestration hardeningへ直接つながりました。証拠・留保・remote CI未実行条件を含む完全な記録は
 [Case Study #1 — RepoHealth 日本語版](docs/CASE_STUDY_01_REPOHEALTH.ja.md)を参照してください。
 
+### Field dogfood：MandateMarshal v0.2
+
+**Case Study #2**では、別OSSのdurable runtime / crash recovery実装でStackMarshalを実使用しました。
+5 mandatory taskを合計5 attemptで完了し、research round 1、tool calls 72を記録してfinalization後に
+`COMPLETE`へ到達しました。特に、最終盤のsource変更後にverificationが古くなった状態で進もうとすると、
+`missing_verified_workspace_fingerprint`で`COMPLETE`を拒否し、最終workspaceの再verificationを要求しました。
+
+同じfield runから、v1.1.3で直すGit porcelain path parsing、launcher/CLI/Skill version skew、Windows予約device名
+fingerprint診断の3件も見つかりました。詳細は
+[Case Study #2 — MandateMarshal 日本語版](docs/CASE_STUDY_02_MANDATEMARSHAL.ja.md)（[English](docs/CASE_STUDY_02_MANDATEMARSHAL.md)）を参照してください。
+
 ### 1コマンドで導入
 
 **Windows PowerShell：**
@@ -105,8 +116,10 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 ```
 
 installerは専用virtual environmentへCLIを隔離導入し、対応するCodex Skillを配置し、versioned
-Release assetsを検証してpost-install doctorまで実行します。詳細な導入、Security、CLI、state、
-release、development contractは以下の既存説明を維持しています。
+Release assetsを検証してpost-install doctorまで実行します。v1.1.3の`doctor`は、同じPC上の
+managed/PATH launcher provenanceと既知のversion skewも表示し、すべての`stackmarshal` commandが
+同じinstallationを指しているとは仮定しません。詳細な導入、Security、CLI、state、release、
+development contractは以下の既存説明を維持しています。
 
 ## 詳細概要
 
@@ -181,11 +194,11 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 再現性のためversionを固定する場合：
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.2/install.ps1))) -Version v1.1.2
+& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.3/install.ps1))) -Version v1.1.3
 ```
 
 ```bash
-curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.2/install.sh | bash -s -- --version v1.1.2
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.3/install.sh | bash -s -- --version v1.1.3
 ```
 
 GitとPython 3.11以上が前提です。未導入の場合は、検出結果を説明した上でOS package managerを
@@ -201,7 +214,7 @@ restart-pending markerを残します。再起動前の古いSkillはStackMarsha
 Skillだけを手動導入する場合も、`main`ではなく対応するRelease tagへ固定します。
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.2/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.3/skills/stackmarshal
 ```
 
 ## CLI例
@@ -211,7 +224,7 @@ stackmarshal init
 stackmarshal invocation "StackMarshalを使って実装して"
 stackmarshal start --mode build --budget standard \
   --invocation "StackMarshalを使って実装して"
-stackmarshal doctor --host-skill-version 1.1.2
+stackmarshal doctor --host-skill-version 1.1.3
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -256,6 +269,7 @@ flowchart TD
 ## Case Study
 
 - **Case Study #1 — RepoHealth**：ほぼ空のlocal workspaceから、CodexがStackMarshalを明示起動してruntime dependency 0のOSS-readiness CLIを作成し、tests、Ruff、strict mypy、branch-aware coverage 92%、package build、local install smokeまで完走したPhase 3B dogfoodingです。同時にlive state、budget accounting、task同期の次パッチ課題も発見しました。詳細は[日本語Case Study](docs/CASE_STUDY_01_REPOHEALTH.ja.md)（[English](docs/CASE_STUDY_01_REPOHEALTH.md)）を参照してください。
+- **Case Study #2 — MandateMarshal v0.2**：実OSSのdurable runtime / crash recovery開発でStackMarshalを使用し、late source edit後のstale verificationをcompletion gateが実際に拒否しました。同じrunでv1.1.3のruntime-trust hardening対象も発見しています。詳細は[日本語Field Case Study](docs/CASE_STUDY_02_MANDATEMARSHAL.ja.md)（[English](docs/CASE_STUDY_02_MANDATEMARSHAL.md)）を参照してください。
 
 ## セキュリティモデル
 

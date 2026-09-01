@@ -1,14 +1,24 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 
 import pytest
 
-from stackmarshal.cli import EXIT_BUDGET, EXIT_COMPLETE, EXIT_INVALID_STATE, main
+from stackmarshal.cli import (
+    EXIT_BUDGET,
+    EXIT_COMPLETE,
+    EXIT_INVALID_STATE,
+    _launcher_metadata_versions,
+    _launcher_package_version,
+    _path_stackmarshal_candidates,
+    _read_managed_install_state,
+    main,
+)
 from stackmarshal.constants import Phase, __version__
-from stackmarshal.state import load_state, project_info
+from stackmarshal.state import load_state, project_info, terminal_repository_snapshot
 from stackmarshal.taskgraph import load_task_graph
 
 
@@ -349,6 +359,88 @@ def test_activity_budget_exhaustion_formally_stops_and_checkpoints(
     assert "formal_stop" in events
 
 
+def test_managed_install_state_reports_missing_invalid_and_valid_files(tmp_path: Path) -> None:
+    root = tmp_path / "managed"
+    root.mkdir()
+    assert _read_managed_install_state(root) == (None, None)
+
+    state_path = root / "install-state.json"
+    state_path.write_text("[]", encoding="utf-8")
+    assert _read_managed_install_state(root) == (None, "managed_install_state_invalid")
+
+    state_path.write_text("{not-json", encoding="utf-8")
+    data, error = _read_managed_install_state(root)
+    assert data is None
+    assert error == "managed_install_state_unreadable:JSONDecodeError"
+
+    state_path.write_text('{"version":"9.8.7"}', encoding="utf-8")
+    assert _read_managed_install_state(root) == ({"version": "9.8.7"}, None)
+
+
+def test_launcher_version_evidence_is_non_executing_and_bounded(tmp_path: Path) -> None:
+    launcher = tmp_path / ("stackmarshal.cmd" if os.name == "nt" else "stackmarshal")
+    launcher.write_text(
+        'exec "C:/managed/versions/v9.8.7/venv/Scripts/python.exe" -m stackmarshal.cli\n',
+        encoding="utf-8",
+    )
+    assert _launcher_package_version(launcher) == "9.8.7"
+
+    unrelated = tmp_path / ("other.cmd" if os.name == "nt" else "other")
+    unrelated.write_text("no version path here\n", encoding="utf-8")
+    assert _launcher_package_version(unrelated) is None
+
+
+def test_launcher_metadata_versions_are_reported_as_metadata_not_runtime_identity(tmp_path: Path) -> None:
+    python_root = tmp_path / "Python311"
+    scripts = python_root / "Scripts"
+    site_packages = python_root / "Lib" / "site-packages"
+    scripts.mkdir(parents=True)
+    site_packages.mkdir(parents=True)
+    launcher = scripts / "stackmarshal.exe"
+    launcher.write_bytes(b"placeholder")
+    metadata = site_packages / "stackmarshal-9.8.7.dist-info" / "METADATA"
+    metadata.parent.mkdir()
+    metadata.write_text("Metadata-Version: 2.1\nName: stackmarshal\nVersion: 9.8.7\n", encoding="utf-8")
+
+    assert _launcher_package_version(launcher) is None
+    assert _launcher_metadata_versions(launcher) == ["9.8.7"]
+
+
+def test_path_candidate_inventory_does_not_execute_launchers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    launcher_name = "stackmarshal.cmd" if os.name == "nt" else "stackmarshal"
+    launcher = bin_dir / launcher_name
+    launcher.write_text(
+        'exec "C:/managed/versions/v9.8.7/venv/Scripts/python.exe" -m stackmarshal.cli\n',
+        encoding="utf-8",
+    )
+    if os.name != "nt":
+        launcher.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bin_dir))
+
+    candidates = _path_stackmarshal_candidates()
+
+    assert len(candidates) == 1
+    assert Path(str(candidates[0]["path"])).name.casefold() == launcher_name.casefold()
+    assert candidates[0]["version"] == "9.8.7"
+    assert candidates[0]["metadata_versions"] == []
+
+
+def _isolate_doctor_install_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    base = tmp_path / "managed-base"
+    if os.name == "nt":
+        monkeypatch.setenv("LOCALAPPDATA", str(base))
+        root = base / "StackMarshal"
+    else:
+        monkeypatch.setenv("XDG_DATA_HOME", str(base))
+        root = base / "stackmarshal"
+    monkeypatch.setenv("PATH", "")
+    return root
+
+
 def test_doctor_detects_stale_host_skill(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -357,9 +449,123 @@ def test_doctor_detects_stale_host_skill(
     skill.parent.mkdir(parents=True)
     skill.write_text(f'---\nmetadata:\n  version: "{__version__}"\n---\n', encoding="utf-8")
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    _isolate_doctor_install_root(tmp_path, monkeypatch)
 
     code, payload = _call(capsys, ["doctor", "--host-skill-version", __version__])
     assert code == 0 and payload["ready"] is True
+    assert payload["version_skew"] is False
     code, payload = _call(capsys, ["doctor", "--host-skill-version", "0.0.0"])
     assert code == EXIT_INVALID_STATE
     assert payload["restart_required"] is True
+
+
+def test_doctor_detects_managed_cli_version_skew(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_home = tmp_path / "codex"
+    skill = codex_home / "skills" / "stackmarshal" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(f'---\nmetadata:\n  version: "{__version__}"\n---\n', encoding="utf-8")
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    install_root = _isolate_doctor_install_root(tmp_path, monkeypatch)
+    install_root.mkdir(parents=True)
+    launcher = install_root / "bin" / ("stackmarshal.cmd" if os.name == "nt" else "stackmarshal")
+    launcher.parent.mkdir()
+    launcher.write_text("managed launcher placeholder\n", encoding="utf-8")
+    (install_root / "install-state.json").write_text(
+        json.dumps(
+            {
+                "version": "1.1.1",
+                "cli": {"version": "1.1.1", "launcher": str(launcher)},
+                "skill": {"version": "1.1.1"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code, payload = _call(capsys, ["doctor", "--host-skill-version", __version__])
+    assert code == EXIT_INVALID_STATE
+    assert payload["ready"] is False
+    assert payload["repair_required"] is True
+    assert payload["version_skew"] is True
+    assert payload["managed_install"]["version"] == "1.1.1"
+    assert "stackmarshal_version_skew" in payload["warnings"]
+
+
+def test_doctor_reports_resolved_managed_launcher_without_executing_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_home = tmp_path / "codex"
+    skill = codex_home / "skills" / "stackmarshal" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(f'---\nmetadata:\n  version: "{__version__}"\n---\n', encoding="utf-8")
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    install_root = _isolate_doctor_install_root(tmp_path, monkeypatch)
+    launcher_name = "stackmarshal.cmd" if os.name == "nt" else "stackmarshal"
+    launcher = install_root / "bin" / launcher_name
+    launcher.parent.mkdir(parents=True)
+    launcher.write_text(
+        f'exec "C:/managed/versions/v{__version__}/venv/Scripts/python.exe" -m stackmarshal.cli\n',
+        encoding="utf-8",
+    )
+    if os.name != "nt":
+        launcher.chmod(0o755)
+    (install_root / "install-state.json").write_text(
+        json.dumps(
+            {
+                "version": __version__,
+                "cli": {"version": __version__, "launcher": str(launcher)},
+                "skill": {"version": __version__},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PATH", str(launcher.parent))
+
+    code, payload = _call(capsys, ["doctor", "--host-skill-version", __version__])
+
+    assert code == 0
+    assert payload["ready"] is True
+    assert payload["version_skew"] is False
+    assert payload["path_resolution"]["resolved_launcher_version"] == __version__
+    assert len(payload["path_resolution"]["candidates"]) == 1
+    assert payload["warnings"] == []
+
+
+def test_doctor_fails_closed_on_malformed_managed_install_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_home = tmp_path / "codex"
+    skill = codex_home / "skills" / "stackmarshal" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(f'---\nmetadata:\n  version: "{__version__}"\n---\n', encoding="utf-8")
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    install_root = _isolate_doctor_install_root(tmp_path, monkeypatch)
+    install_root.mkdir(parents=True)
+    (install_root / "install-state.json").write_text("{broken", encoding="utf-8")
+
+    code, payload = _call(capsys, ["doctor", "--host-skill-version", __version__])
+
+    assert code == EXIT_INVALID_STATE
+    assert payload["repair_required"] is True
+    assert payload["managed_install"]["state_error"] == "managed_install_state_unreadable:JSONDecodeError"
+    assert "managed_install_state_unreadable:JSONDecodeError" in payload["warnings"]
+
+
+def test_terminal_repository_snapshot_preserves_porcelain_status_columns(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    _git(root, "init")
+    _git(root, "config", "user.email", "stackmarshal@example.invalid")
+    _git(root, "config", "user.name", "StackMarshal Test")
+    agents = root / "AGENTS.md"
+    agents.write_text("initial\n", encoding="utf-8")
+    _git(root, "add", "AGENTS.md")
+    _git(root, "commit", "-m", "initial")
+    agents.write_text("changed\n", encoding="utf-8")
+
+    snapshot = terminal_repository_snapshot(root)
+
+    assert snapshot["git_dirty"] is True
+    assert snapshot["git_status_porcelain"] == [" M AGENTS.md"]
+    assert snapshot["git_dirty_paths"] == ["AGENTS.md"]

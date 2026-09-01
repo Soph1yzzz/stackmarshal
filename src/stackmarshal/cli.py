@@ -4,6 +4,7 @@ import argparse
 from collections.abc import Callable
 from dataclasses import asdict
 import hashlib
+from importlib.metadata import distributions
 import json
 import os
 from pathlib import Path
@@ -570,6 +571,111 @@ def _skill_version(path: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def _default_managed_install_root() -> Path:
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA")
+        return (Path(base) if base else Path.home() / "AppData" / "Local") / "StackMarshal"
+    base = os.environ.get("XDG_DATA_HOME")
+    return (Path(base) if base else Path.home() / ".local" / "share") / "stackmarshal"
+
+
+def _normalized_path(path: Path) -> str:
+    try:
+        value = path.expanduser().resolve()
+    except OSError:
+        value = path.expanduser().absolute()
+    return os.path.normcase(str(value))
+
+
+def _read_managed_install_state(root: Path) -> tuple[dict[str, Any] | None, str | None]:
+    path = root / "install-state.json"
+    if not path.exists():
+        return None, None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, f"managed_install_state_unreadable:{exc.__class__.__name__}"
+    if not isinstance(data, dict):
+        return None, "managed_install_state_invalid"
+    return data, None
+
+
+def _launcher_package_version(path: Path) -> str | None:
+    """Infer a launcher runtime version only from non-executing, high-confidence evidence."""
+    normalized = _normalized_path(path)
+    try:
+        if path.suffix.casefold() in {".cmd", ".bat", ".sh"} or (os.name != "nt" and path.is_file()):
+            with path.open("rb") as handle:
+                text = handle.read(16_384).decode("utf-8", errors="replace")
+            match = re.search(r"[\\/]versions[\\/]v(\d+\.\d+\.\d+)[\\/]", text)
+            if match:
+                return match.group(1)
+    except OSError:
+        pass
+
+    current = Path(sys.argv[0])
+    if current.exists() and _normalized_path(current) == normalized:
+        return __version__
+    return None
+
+
+def _launcher_metadata_versions(path: Path) -> list[str]:
+    """Return nearby installed-distribution versions without claiming launcher runtime identity."""
+    parent = path.parent
+    roots: list[Path] = []
+    if parent.name.casefold() == "scripts":
+        roots.append(parent.parent / "Lib" / "site-packages")
+    elif parent.name == "bin":
+        roots.extend(sorted((parent.parent / "lib").glob("python*/site-packages")))
+    versions: set[str] = set()
+    for site_packages in roots:
+        if not site_packages.is_dir():
+            continue
+        try:
+            for dist in distributions(path=[str(site_packages)]):
+                metadata_name = dist.metadata["Name"]
+                name = str(metadata_name or "").casefold().replace("_", "-")
+                if name == "stackmarshal":
+                    versions.add(dist.version)
+        except (OSError, ValueError):
+            continue
+    return sorted(versions)
+
+
+def _path_stackmarshal_candidates() -> list[dict[str, Any]]:
+    names: tuple[str, ...]
+    if os.name == "nt":
+        names = ("stackmarshal.com", "stackmarshal.exe", "stackmarshal.bat", "stackmarshal.cmd")
+    else:
+        names = ("stackmarshal",)
+    candidates: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw_directory in os.environ.get("PATH", "").split(os.pathsep):
+        if not raw_directory:
+            continue
+        directory = Path(raw_directory.strip('"')).expanduser()
+        for name in names:
+            candidate = directory / name
+            try:
+                is_file = candidate.is_file()
+            except OSError:
+                is_file = False
+            if not is_file:
+                continue
+            key = _normalized_path(candidate)
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(
+                {
+                    "path": str(candidate),
+                    "version": _launcher_package_version(candidate),
+                    "metadata_versions": _launcher_metadata_versions(candidate),
+                }
+            )
+    return candidates
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
     skill_path = codex_home / "skills" / "stackmarshal" / "SKILL.md"
@@ -577,7 +683,6 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     installed = _skill_version(skill_path)
     host = args.host_skill_version
     restart_required = host is not None and host != __version__
-    repair_required = installed != __version__
     restart_pending = restart_marker.is_file()
     marker_version: str | None = None
     if restart_pending:
@@ -587,6 +692,63 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             marker_data = {}
         if isinstance(marker_data, dict) and isinstance(marker_data.get("version"), str):
             marker_version = str(marker_data["version"])
+
+    managed_root = _default_managed_install_root()
+    managed_state, managed_state_error = _read_managed_install_state(managed_root)
+    managed_version: str | None = None
+    managed_launcher: str | None = None
+    if managed_state is not None:
+        value = managed_state.get("version")
+        if isinstance(value, str):
+            managed_version = value
+        cli_state = managed_state.get("cli")
+        if isinstance(cli_state, dict) and isinstance(cli_state.get("launcher"), str):
+            managed_launcher = str(cli_state["launcher"])
+
+    path_candidates = _path_stackmarshal_candidates()
+    resolved_launcher = shutil.which("stackmarshal")
+    resolved_launcher_version: str | None = None
+    resolved_launcher_metadata_versions: list[str] = []
+    if resolved_launcher is not None:
+        resolved_key = _normalized_path(Path(resolved_launcher))
+        for candidate in path_candidates:
+            if _normalized_path(Path(str(candidate["path"]))) == resolved_key:
+                value = candidate.get("version")
+                resolved_launcher_version = str(value) if value else None
+                metadata = candidate.get("metadata_versions", [])
+                if isinstance(metadata, list):
+                    resolved_launcher_metadata_versions = [str(item) for item in metadata]
+                break
+        if (
+            resolved_launcher_version is None
+            and managed_launcher is not None
+            and _normalized_path(Path(managed_launcher)) == resolved_key
+        ):
+            resolved_launcher_version = managed_version
+
+    known_versions = {__version__}
+    if managed_version is not None:
+        known_versions.add(managed_version)
+    for candidate in path_candidates:
+        version = candidate.get("version")
+        if version:
+            known_versions.add(str(version))
+        metadata = candidate.get("metadata_versions", [])
+        if isinstance(metadata, list):
+            known_versions.update(str(item) for item in metadata if item)
+    version_skew = len(known_versions) > 1
+    repair_required = installed != __version__ or version_skew or managed_state_error is not None
+
+    warnings: list[str] = []
+    if version_skew:
+        warnings.append("stackmarshal_version_skew")
+    if len(path_candidates) > 1:
+        warnings.append("multiple_stackmarshal_launchers_on_path")
+    if resolved_launcher is not None and resolved_launcher_version is None:
+        warnings.append("resolved_launcher_version_unverified")
+    if managed_state_error is not None:
+        warnings.append(managed_state_error)
+
     ready = not restart_required and not repair_required and not restart_pending
     _json({
         "ready": ready,
@@ -597,6 +759,26 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         "restart_pending": restart_pending,
         "restart_marker_version": marker_version,
         "repair_required": repair_required,
+        "version_skew": version_skew,
+        "known_versions": sorted(known_versions),
+        "invoked_cli": {
+            "entrypoint": sys.argv[0],
+            "python": sys.executable,
+            "version": __version__,
+        },
+        "path_resolution": {
+            "resolved_launcher": resolved_launcher,
+            "resolved_launcher_version": resolved_launcher_version,
+            "resolved_launcher_metadata_versions": resolved_launcher_metadata_versions,
+            "candidates": path_candidates,
+        },
+        "managed_install": {
+            "root": str(managed_root),
+            "version": managed_version,
+            "launcher": managed_launcher,
+            "state_error": managed_state_error,
+        },
+        "warnings": warnings,
         "skill_path": str(skill_path),
     })
     return 0 if ready else EXIT_INVALID_STATE

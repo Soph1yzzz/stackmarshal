@@ -93,6 +93,18 @@ The same dogfood also exposed integration gaps instead of hiding them; those fin
 v1.1 live-orchestration hardening. Read the full evidence and limitations in
 [Case Study #1 — RepoHealth](docs/CASE_STUDY_01_REPOHEALTH.md).
 
+### Field dogfood: MandateMarshal v0.2
+
+**Case Study #2** used StackMarshal during durable-runtime and crash-recovery development in another
+OSS project. The run completed five mandatory tasks in five total attempts, recorded one research
+round and 72 tool calls, and reached `COMPLETE` only after finalization. Most importantly, after a
+late source change StackMarshal rejected stale verification with
+`missing_verified_workspace_fingerprint` until the final workspace was verified again.
+
+That field run also found three runtime-trust issues that define v1.1.3: Git porcelain path parsing,
+launcher/CLI/Skill version skew, and Windows reserved-device-name fingerprint diagnostics. See
+[Case Study #2 — MandateMarshal](docs/CASE_STUDY_02_MANDATEMARSHAL.md) ([日本語](docs/CASE_STUDY_02_MANDATEMARSHAL.ja.md)).
+
 ### Install in one command
 
 **Windows PowerShell:**
@@ -108,8 +120,10 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 ```
 
 The installer uses a dedicated virtual environment, installs the matching Codex Skill, verifies
-versioned Release assets, and runs a post-install doctor check. The detailed installation,
-security, CLI, state, release, and development contracts remain below.
+versioned Release assets, and runs a post-install doctor check. In v1.1.3, `doctor` also surfaces
+managed/PATH launcher provenance and known version skew instead of assuming every `stackmarshal`
+command on the machine resolves to the same installation. The detailed installation, security,
+CLI, state, release, and development contracts remain below.
 
 ## Detailed overview
 
@@ -186,11 +200,11 @@ Run the same command again to update to the latest stable release or repair the 
 version. Pin a reproducible version when required:
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.2/install.ps1))) -Version v1.1.2
+& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.3/install.ps1))) -Version v1.1.3
 ```
 
 ```bash
-curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.2/install.sh | bash -s -- --version v1.1.2
+curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.3/install.sh | bash -s -- --version v1.1.3
 ```
 
 Git and Python 3.11 or newer are prerequisites. When either is missing, the bootstrap explains
@@ -208,7 +222,7 @@ after restart before work can begin.
 For a Skill-only manual installation, use the matching release tag:
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.2/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.3/skills/stackmarshal
 ```
 
 ## Quick CLI tour
@@ -218,7 +232,7 @@ stackmarshal init
 stackmarshal invocation "Use StackMarshal to build this"
 stackmarshal start --mode build --budget standard \
   --invocation "Use StackMarshal to build this"
-stackmarshal doctor --host-skill-version 1.1.2
+stackmarshal doctor --host-skill-version 1.1.3
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -265,6 +279,7 @@ Formal stop states include `BUDGET_EXHAUSTED`, `STAGNATED`, `REPEATED_FAILURE`,
 ## Case studies
 
 - **Case Study #1 — RepoHealth:** Codex used StackMarshal in a controlled Phase 3B dogfooding run to build a dependency-free OSS-readiness CLI from an almost-empty local workspace, then pass tests, Ruff, strict mypy, 92% branch-aware coverage, package build, and local install smoke. The run also exposed live-state, budget-accounting, and task-synchronization gaps for the next patch. See [the full case study](docs/CASE_STUDY_01_REPOHEALTH.md) ([日本語](docs/CASE_STUDY_01_REPOHEALTH.ja.md)).
+- **Case Study #2 — MandateMarshal v0.2:** StackMarshal was used for durable-runtime/crash-recovery development in a real OSS task. A late source edit made verification stale, and the completion gate refused `COMPLETE` until the final workspace was verified again. The same run exposed the runtime-trust defects hardened in v1.1.3. See [the field case study](docs/CASE_STUDY_02_MANDATEMARSHAL.md) ([日本語](docs/CASE_STUDY_02_MANDATEMARSHAL.ja.md)).
 
 ## Security model
 
@@ -346,7 +361,7 @@ behavior is a v1 release requirement.
 `python scripts/build_release.py` resolves the current version from `pyproject.toml` and produces:
 
 - `install.ps1`, `install.sh`, and the shared verified `installer.py`
-- `stackmarshal-skill-v1.1.2.zip`
+- `stackmarshal-skill-v1.1.3.zip`
 - Python wheel and source distribution
 - source archive
 - `SHA256SUMS`
