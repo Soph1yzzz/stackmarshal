@@ -44,7 +44,7 @@ later release counts, coverage, commits, or assets. Current release requirements
 - PASS: research, candidate, tool, replan, task-attempt, failure, stagnation, and scope budgets.
 - PASS: safety-first stop priority and terminal status codes.
 - PASS: every formal CLI stop creates checkpoint JSON and Markdown.
-- PASS: user-local HMAC checkpoint integrity, repository-lineage identity, exact worktree fingerprint, Git HEAD, dirty state, completed work, and do-not-repeat state.
+- PASS: user-local HMAC integrity for live run/task authority, checkpoints, and acquisition receipts, plus repository-lineage identity, exact worktree fingerprint, Git HEAD, dirty state, completed work, and do-not-repeat state.
 - PASS: unknown future state/checkpoint schemas are rejected.
 
 ## Distribution and quality
@@ -60,7 +60,10 @@ later release counts, coverage, commits, or assets. Current release requirements
 
 ## Final publication gates
 
-The release is marked COMPLETE only after the immutable release commit passes the final Codex
-Security repository scan, public CI and CodeQL succeed, the v1.1.0 tag resolves to that commit,
-all published asset digests match the local deterministic build, downloaded `SHA256SUMS` verify,
-and a clean public installer smoke succeeds.
+A release is marked COMPLETE only after its full automated quality gate, relevant adversarial
+security regressions, focused source-backed security review, public CI and CodeQL, tag-to-commit
+verification, deterministic published asset digest checks, downloaded `SHA256SUMS` verification,
+and a clean public installer smoke all pass. A full Codex Security repository scan is an additional
+risk-triggered gate for material security-boundary or architectural changes rather than a mandatory
+step for every version; any known unresolved material security finding blocks release regardless of
+scan mode.

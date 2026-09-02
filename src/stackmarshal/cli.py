@@ -155,7 +155,7 @@ def _active_runs(root: Path) -> list[tuple[Path, Any]]:
     for path in sorted(runs.glob("*/run.json")):
         _assert_workspace_entry(root, path.parent, expected="dir")
         _assert_workspace_entry(root, path, expected="file")
-        state = load_state(path)
+        state = load_state(path, project_root=root)
         if state.status is Status.RUNNING:
             active.append((path, state))
     return active
@@ -375,7 +375,7 @@ def _find_state(root: Path, run_id: str | None) -> tuple[Path, Any]:
             raise FileNotFoundError("No StackMarshal run found")
         path = candidates[0]
         _paths(root, path.parent.name)
-    return path, load_state(path)
+    return path, load_state(path, project_root=root)
 
 
 def cmd_state_show(args: argparse.Namespace) -> int:

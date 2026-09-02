@@ -16,11 +16,15 @@ from stackmarshal.config import default_config
 from stackmarshal.constants import CommandClass, Mode, Status
 from stackmarshal.integrity import sign_record, signing_key_path
 from stackmarshal.security import classify_command
+from stackmarshal.taskgraph import add_task, load_task_graph
+from stackmarshal.validation import validate_json_file
 from stackmarshal.state import (
     _validate_fingerprint_path,
     _windows_reserved_component,
     create_run,
+    load_state,
     project_info,
+    save_state,
     terminal_workspace_fingerprint,
     workspace_fingerprint,
 )
@@ -273,6 +277,52 @@ def test_receipt_tampering_and_replaced_files_block_rollback(tmp_path: Path) -> 
     assert installed.exists()
 
 
+def test_live_run_state_tampering_is_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    state = create_run(root, "Use StackMarshal to build", Mode.BUILD, default_config())
+    state_path = root / ".stackmarshal" / "runs" / state.run_id / "run.json"
+    save_state(state, state_path)
+    data = json.loads(state_path.read_text(encoding="utf-8"))
+    assert data["integrity_algorithm"] == "hmac-sha256-v1"
+    data["phase"] = "VERIFICATION"
+    data["progress"] = {"live_contract_version": 1, "verified_workspace": {"workspace_fingerprint": "0" * 64}}
+    state_path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError, match="signature mismatch"):
+        load_state(state_path, project_root=root)
+
+
+def test_unsigned_repository_live_state_is_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    state = create_run(root, "Use StackMarshal to build", Mode.BUILD, default_config())
+    state_path = root / ".stackmarshal" / "runs" / state.run_id / "run.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(json.dumps(state.to_dict()), encoding="utf-8")
+    assert validate_json_file(state_path, "run-state")["valid"] is False
+    with pytest.raises(ValueError, match="integrity algorithm"):
+        load_state(state_path, project_root=root)
+
+
+def test_task_graph_tampering_and_unsigned_graph_are_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    add_task(root, "security", "verify live authority", acceptance=["signed state"])
+    graph_path = root / ".stackmarshal" / "project" / "task-graph.json"
+    data = json.loads(graph_path.read_text(encoding="utf-8"))
+    assert data["integrity_algorithm"] == "hmac-sha256-v1"
+    data["tasks"][0]["status"] = "done"
+    data["tasks"][0]["evidence"] = ["forged"]
+    graph_path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError, match="signature mismatch"):
+        load_task_graph(root, required=True)
+
+    graph_path.write_text(json.dumps({"schema_version": "1.0", "tasks": []}), encoding="utf-8")
+    assert validate_json_file(graph_path, "task-graph")["valid"] is False
+    with pytest.raises(ValueError, match="integrity algorithm"):
+        load_task_graph(root, required=True)
+
+
 def test_signing_key_inside_project_is_rejected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -282,6 +332,10 @@ def test_signing_key_inside_project_is_rejected(
     state = create_run(project, "Use StackMarshal", Mode.BUILD, default_config())
     state.status = Status.CHECKPOINT_READY
     assert project.resolve() in signing_key_path().resolve(strict=False).parents
+    with pytest.raises(ValueError, match="outside the project"):
+        save_state(state, project / ".stackmarshal" / "runs" / state.run_id / "run.json")
+    with pytest.raises(ValueError, match="outside the project"):
+        add_task(project, "unsafe-key", "must reject repository-local signing key")
     with pytest.raises(ValueError, match="outside the project"):
         create_checkpoint(state, project / "checkpoint", next_action="stop")
 

@@ -12,6 +12,7 @@ from typing import Any
 
 from .config import Config
 from .constants import Mode, Phase, SCHEMA_VERSION, Status
+from .integrity import ensure_signing_key_outside, sign_record, verify_record
 from .models import BudgetState, Invocation, ProjectInfo, RunState
 
 RUN_ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
@@ -378,18 +379,28 @@ def stop(state: RunState, status: Status, reason: str, details: dict[str, Any] |
 
 
 def save_state(state: RunState, path: Path) -> None:
+    project_root = Path(state.project.root)
+    ensure_signing_key_outside(project_root)
+    signed = sign_record(state.to_dict())
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(state.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    temporary.write_text(json.dumps(signed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     temporary.replace(path)
 
 
-def load_state(path: Path) -> RunState:
+def load_state(path: Path, *, project_root: Path | None = None) -> RunState:
     raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("Run state must be a JSON object")
     if raw.get("schema_version") != SCHEMA_VERSION:
         raise ValueError(f"Unsupported schema_version: {raw.get('schema_version')}")
     validate_run_id(str(raw.get("run_id", "")))
-    return RunState.from_dict(raw)
+    if project_root is not None:
+        ensure_signing_key_outside(project_root)
+    verify_record(raw)
+    state = RunState.from_dict(raw)
+    ensure_signing_key_outside(project_root or state.root)
+    return state
 
 
 def append_event(path: Path, event_type: str, phase: Phase, payload: dict[str, Any]) -> dict[str, Any]:

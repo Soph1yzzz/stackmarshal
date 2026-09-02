@@ -64,6 +64,10 @@ def validate_json_file(path: Path, kind: str) -> dict[str, Any]:
         return {"valid": False, "errors": ["expected_json_object"]}
     if kind == "run-state":
         errors = validate_run_state(data)
+        integrity_required = {"integrity_algorithm", "integrity_key_id", "integrity_hmac_sha256"}
+        errors.extend(f"missing:{key}" for key in sorted(integrity_required - set(data)))
+        if data.get("integrity_algorithm") not in (None, "hmac-sha256-v1"):
+            errors.append("unsupported_run_state_integrity")
     elif kind == "candidate":
         required = {"id", "kind", "source", "scores", "risks", "decision"}
         errors = [f"missing:{key}" for key in sorted(required - set(data))]
@@ -71,7 +75,10 @@ def validate_json_file(path: Path, kind: str) -> dict[str, Any]:
         errors = [] if data.get("schema_version") == "1.0" and isinstance(data.get("capabilities"), list) else ["invalid_capability_map"]
     elif kind == "task-graph":
         tasks = data.get("tasks")
-        errors = []
+        integrity_required = {"integrity_algorithm", "integrity_key_id", "integrity_hmac_sha256"}
+        errors = [f"missing:{key}" for key in sorted(integrity_required - set(data))]
+        if data.get("integrity_algorithm") not in (None, "hmac-sha256-v1"):
+            errors.append("unsupported_task_graph_integrity")
         if data.get("schema_version") != "1.0" or not isinstance(tasks, list):
             errors.append("invalid_task_graph")
         else:

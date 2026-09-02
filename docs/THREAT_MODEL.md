@@ -3,7 +3,7 @@
 ## Assets
 
 Workspace integrity, existing Git changes, credentials, publication authority,
-execution budget, checkpoint truth, provenance, and acceptance evidence.
+execution budget, live run/task authority, checkpoint truth, provenance, and acceptance evidence.
 
 ## Trust boundaries
 
@@ -28,13 +28,13 @@ boundaries.
 - Secret exfiltration and helper execution: fail-closed command classification, approval, redaction, no secret logging, rejection of Git global-option/alias injection, and explicit rejection of read options that can execute helpers, write output, or escape repository reads.
 - Workspace escape/destructive writes or reads: strict run-id grammar, resolved-path containment, symlink/junction rejection across `.stackmarshal` state and `.gitignore` initialization, containment-aware workspace/terminal fingerprints that reject directory junction traversal before recursion, receipt-bound file rollback, and dirty-state capture.
 - Infinite loops or repository-driven policy weakening: project configuration may only tighten bounded budgets and cannot select the deep profile, disable mandatory approvals, or weaken guarded autonomy; larger deep budgets require explicit user CLI selection. Progress tests, failure fingerprints, and replan caps remain enforced by the Core.
-- Forged resume state: schema validation, user-local HMAC signature, repository-lineage identity, exact tracked/staged/untracked worktree fingerprint, strict HEAD and dirty-state checks, and lock verification.
-- False completion: mandatory acceptance evidence required for `COMPLETE`, final verification is bound to a terminal deliverable fingerprint, finalization seals StackMarshal-owned bookkeeping before terminal transition, and post-finalization deliverable/build/release mutations invalidate `COMPLETE`.
+- Forged live or resume state: canonical live `run.json` and `task-graph.json`, checkpoints, and acquisition receipts are authenticated with a user-local HMAC key kept outside the repository; unsigned or modified authority is rejected before use. Resume additionally validates repository-lineage identity, exact tracked/staged/untracked worktree fingerprint, strict HEAD and dirty-state checks, and lock verification.
+- False completion: mandatory acceptance evidence required for `COMPLETE`, live run/task authority must pass HMAC verification, final verification is bound to a terminal deliverable fingerprint, finalization seals StackMarshal-owned bookkeeping before terminal transition, and post-finalization deliverable/build/release mutations invalidate `COMPLETE`.
 - Runtime self expansion: no runtime self-update, self-rewrite, recursive invocation, or delegated control. Version installation and update are handled by the separate, versioned bootstrap/installer boundary.
 
 ## Residual risk
 
 StackMarshal is not an OS sandbox and cannot cryptographically force an LLM host to
-follow prose. The checkpoint signing key protects against project-local tampering, not
-malware already running as the same operating-system user. Operators should use
+follow prose. The user-local integrity key protects StackMarshal-owned authority against
+project-local tampering, not malware already running as the same operating-system user. Operators should use
 least-privilege credentials, protected branches, and isolated execution for high-risk repositories.

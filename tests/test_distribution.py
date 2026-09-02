@@ -19,7 +19,8 @@ import pytest
 from stackmarshal.checkpoint import create_checkpoint
 from stackmarshal.config import default_config
 from stackmarshal.constants import Mode, Status, __version__
-from stackmarshal.state import create_run
+from stackmarshal.state import create_run, save_state
+from stackmarshal.taskgraph import save_task_graph
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -416,7 +417,11 @@ def test_json_schemas_are_valid_and_accept_runtime_examples(tmp_path: Path) -> N
         schemas[path.stem] = schema
 
     state = create_run(tmp_path, "Use StackMarshal to build", Mode.BUILD, default_config())
-    Draft202012Validator(schemas["run-state.schema"]).validate(state.to_dict())
+    state_path = tmp_path / ".stackmarshal" / "runs" / state.run_id / "run.json"
+    save_state(state, state_path)
+    Draft202012Validator(schemas["run-state.schema"]).validate(
+        json.loads(state_path.read_text(encoding="utf-8"))
+    )
     Draft202012Validator(schemas["candidate.schema"]).validate(
         {
             "id": "candidate-1",
@@ -430,21 +435,23 @@ def test_json_schemas_are_valid_and_accept_runtime_examples(tmp_path: Path) -> N
     Draft202012Validator(schemas["capability-map.schema"]).validate(
         {"schema_version": "1.0", "capabilities": []}
     )
+    task_graph = {
+        "schema_version": "1.0",
+        "tasks": [
+            {
+                "id": "verify",
+                "summary": "verify",
+                "mandatory": True,
+                "acceptance": ["tests pass"],
+                "status": "done",
+                "attempts": 1,
+                "evidence": ["pytest passed"],
+            }
+        ],
+    }
+    save_task_graph(tmp_path, task_graph)
     Draft202012Validator(schemas["task-graph.schema"]).validate(
-        {
-            "schema_version": "1.0",
-            "tasks": [
-                {
-                    "id": "verify",
-                    "summary": "verify",
-                    "mandatory": True,
-                    "acceptance": ["tests pass"],
-                    "status": "done",
-                    "attempts": 1,
-                    "evidence": ["pytest passed"],
-                }
-            ],
-        }
+        json.loads((tmp_path / ".stackmarshal" / "project" / "task-graph.json").read_text(encoding="utf-8"))
     )
     state.status = Status.CHECKPOINT_READY
     checkpoint, _ = create_checkpoint(state, tmp_path / "checkpoint", next_action="continue")

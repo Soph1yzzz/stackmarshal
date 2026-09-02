@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from .constants import STATE_DIR
+from .integrity import ensure_signing_key_outside, sign_record, verify_record
 
 TASK_STATUSES = {"pending", "in_progress", "done", "blocked"}
 
@@ -28,7 +29,11 @@ def load_task_graph(root: Path, *, required: bool = False) -> dict[str, Any]:
             raise ValueError("Missing canonical task graph: .stackmarshal/project/task-graph.json")
         return empty_graph()
     raw = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict) or raw.get("schema_version") != "1.0":
+    if not isinstance(raw, dict):
+        raise ValueError("Task graph must be a JSON object")
+    ensure_signing_key_outside(root)
+    verify_record(raw)
+    if raw.get("schema_version") != "1.0":
         raise ValueError("Invalid task graph schema")
     tasks = raw.get("tasks")
     if not isinstance(tasks, list):
@@ -51,10 +56,12 @@ def load_task_graph(root: Path, *, required: bool = False) -> dict[str, Any]:
 
 
 def save_task_graph(root: Path, graph: dict[str, Any]) -> None:
+    ensure_signing_key_outside(root)
+    signed = sign_record(graph)
     path = task_graph_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(graph, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    temporary.write_text(json.dumps(signed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     temporary.replace(path)
     task_graph_markdown_path(root).write_text(render_markdown(graph), encoding="utf-8")
 

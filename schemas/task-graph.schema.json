@@ -3,7 +3,7 @@
   "$id": "https://stackmarshal.dev/schemas/task-graph.schema.json",
   "title": "StackMarshal Task Graph",
   "type": "object",
-  "required": ["schema_version", "tasks"],
+  "required": ["schema_version", "tasks", "integrity_algorithm", "integrity_key_id", "integrity_hmac_sha256"],
   "properties": {
     "schema_version": {"const": "1.0"},
     "tasks": {
@@ -22,7 +22,10 @@
         },
         "additionalProperties": false
       }
-    }
+    },
+    "integrity_algorithm": {"const": "hmac-sha256-v1"},
+    "integrity_key_id": {"type": "string", "pattern": "^[a-f0-9]{16}$"},
+    "integrity_hmac_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
   },
   "additionalProperties": false
 }

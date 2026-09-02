@@ -103,6 +103,8 @@ Case Study #2 directly defines the v1.1.3 runtime-trust hardening scope:
 
 The non-invasive-init, delivery-audit, and compact-output work is intentionally separated into v1.1.4 so the v1.1.3 patch remains focused on trustworthiness of execution and evidence.
 
+A later pre-release security review found a fourth v1.1.3 trust issue that was not part of this field run: live run and canonical task authority lacked the user-local integrity authentication already used for checkpoints and acquisition receipts. v1.1.3 also closes that gap. This is recorded separately so the historical case study does not retroactively claim the field run discovered it.
+
 ## Evidence provenance and limitations
 
 This document is a field-use record, not a claim that the MandateMarshal repository or raw StackMarshal run directory is archived in this repository.

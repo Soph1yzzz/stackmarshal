@@ -99,6 +99,8 @@ Case Study #2からv1.1.3のruntime-trust hardening scopeを次の3点に固定�
 
 repo非侵襲init、delivery audit、compact CLI outputはv1.1.4へ分離し、v1.1.3をexecution/evidence trustの修正に限定します。
 
+その後のpre-release security reviewで、このfield run由来ではない4件目のv1.1.3 trust issueも見つかりました。checkpointとacquisition receiptにはユーザー領域integrity認証がある一方、live runとcanonical task authorityには同等の保護がありませんでした。v1.1.3ではこの差も閉じています。field runが発見したと後付けしないため、この内容は後日談として分離して記録します。
+
 ## Evidence provenanceと留保
 
 この文書はfield-use記録であり、MandateMarshal repositoryや生のStackMarshal run directoryがこのrepository内にarchiveされていると主張するものではありません。

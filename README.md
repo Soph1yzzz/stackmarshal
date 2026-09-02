@@ -65,9 +65,9 @@ a resumable checkpoint when safe completion is not possible.
 - **Security gates are part of the harness.** Publication, secrets, billing, privilege, global
   writes, external binaries, and network writes remain approval boundaries; unknown command forms
   fail closed.
-- **Resume is a first-class outcome.** HMAC-protected checkpoints bind decisions to repository
-  lineage and the exact worktree fingerprint so a stopped run can continue without pretending the
-  interruption never happened.
+- **Integrity survives the repository boundary.** User-local HMAC authentication protects live
+  run/task authority as well as checkpoints and receipts; resume also binds decisions to repository
+  lineage and the exact worktree fingerprint.
 - **Codex-specific adapter, agent-neutral Core.** v1 is deliberately not a multi-agent
   orchestrator; the reusable state/policy model is separated from Codex-specific behavior.
 
@@ -101,8 +101,10 @@ round and 72 tool calls, and reached `COMPLETE` only after finalization. Most im
 late source change StackMarshal rejected stale verification with
 `missing_verified_workspace_fingerprint` until the final workspace was verified again.
 
-That field run also found three runtime-trust issues that define v1.1.3: Git porcelain path parsing,
-launcher/CLI/Skill version skew, and Windows reserved-device-name fingerprint diagnostics. See
+That field run found three runtime-trust issues carried into v1.1.3: Git porcelain path parsing,
+launcher/CLI/Skill version skew, and Windows reserved-device-name fingerprint diagnostics. A later
+risk-triggered pre-release security review found a fourth issue—unsigned live run/task authority—which
+v1.1.3 also hardens without rewriting the historical field-run evidence. See
 [Case Study #2 — MandateMarshal](docs/CASE_STUDY_02_MANDATEMARSHAL.md) ([日本語](docs/CASE_STUDY_02_MANDATEMARSHAL.ja.md)).
 
 ### Install in one command
@@ -151,11 +153,11 @@ StackMarshal makes those failure modes explicit and bounded.
 - **Cross-ecosystem capability mapping.** Skills, MCP, plugins, libraries, CLIs, and reference OSS remain distinct.
 - **Supply-chain controls.** Pinning, hashes, provenance, install-hook inspection, least privilege, approval gates, and rollback receipts.
 - **Architecture freeze.** Research re-entry is exceptional and capped.
-- **Authoritative live run.** A bounded job has one RUNNING owner; nested workspaces do not silently inherit an ancestor repository, and allowed repository bootstrap is recorded as lineage migration.
+- **Authenticated live authority.** A bounded job has one RUNNING owner, and both live `run.json` authority and the canonical task graph are protected by a user-local HMAC so repository content cannot forge phase/completion state; nested workspaces do not silently inherit an ancestor repository, and allowed repository bootstrap is recorded as lineage migration.
 - **Live activity budgets.** Observable Codex work consumes Core-owned counters instead of leaving a decorative zero-use ledger.
-- **Canonical task graph.** Machine-readable task status and evidence are synchronized into a generated Markdown view and gate `COMPLETE`.
+- **Canonical task graph.** HMAC-authenticated machine-readable task status and evidence are synchronized into a generated Markdown view and gate `COMPLETE`.
 - **Finite stop harness.** Budgets, repeated-failure fingerprints, stagnation detection, scope-drift limits, and formal terminal states.
-- **Checkpoint/resume.** User-local HMAC signatures protect checkpoint decisions; completed work is not recomputed without a material input change.
+- **Checkpoint/resume.** The same user-local HMAC integrity boundary protects checkpoints and acquisition receipts; completed work is not recomputed without a material input change.
 - **Agent-neutral Core.** v1 ships a Codex adapter; future adapters can reuse the state and policy model.
 
 ## Invocation

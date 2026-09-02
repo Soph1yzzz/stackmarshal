@@ -9,10 +9,11 @@ Items intentionally outside the v1.1.3 runtime-trust hardening scope:
 - Checkpoint migrations when a v1.x schema change is first introduced.
 - A hosted dashboard or marketplace.
 
-v1.1.3 closes the runtime-trust defects discovered during the MandateMarshal v0.2 field dogfood:
+v1.1.3 closes the three runtime-trust defects discovered during the MandateMarshal v0.2 field dogfood:
 Git porcelain status-column preservation, launcher/CLI/Skill/managed-install version-skew diagnosis,
-and explicit fail-closed Windows reserved-device-name diagnostics. Those completed items are release
-history, not future roadmap scope; see [RELEASE_NOTES_v1.1.3.md](RELEASE_NOTES_v1.1.3.md).
+and explicit fail-closed Windows reserved-device-name diagnostics. A later pre-release security review
+also added authenticated live run/task authority to the same hardening release. These completed items
+are release history, not future roadmap scope; see [RELEASE_NOTES_v1.1.3.md](RELEASE_NOTES_v1.1.3.md).
 
 ## Version roadmap
 

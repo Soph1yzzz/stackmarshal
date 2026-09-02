@@ -64,8 +64,8 @@ checkpointを残します。
   boundedなfield/capability調査を通してからArchitectureを凍結します。
 - **Security GateがHarness内にある**：publication、secret、billing、privilege、global write、
   external binary、network writeは承認境界のままです。未知のcommand formもfail-closedします。
-- **停止を失敗扱いだけにしない**：HMACで保護されたcheckpointがrepository lineageと正確な
-  worktree fingerprintへ束縛され、停止後も再計算を避けてresumeできます。
+- **Integrityをrepository境界の外へ置く**：ユーザー領域HMACでlive run/task authority、checkpoint、
+  receiptを保護し、resume時はrepository lineageと正確なworktree fingerprintにも束縛します。
 - **Codex専用Adapter + Agent非依存Core**：v1はmulti-agent orchestratorではありません。
   Codex固有挙動をAdapter/Skillへ分離し、Core側は状態・Policy Modelを再利用可能にしています。
 
@@ -97,8 +97,8 @@ live-orchestration hardeningへ直接つながりました。証拠・留保・r
 `COMPLETE`へ到達しました。特に、最終盤のsource変更後にverificationが古くなった状態で進もうとすると、
 `missing_verified_workspace_fingerprint`で`COMPLETE`を拒否し、最終workspaceの再verificationを要求しました。
 
-同じfield runから、v1.1.3で直すGit porcelain path parsing、launcher/CLI/Skill version skew、Windows予約device名
-fingerprint診断の3件も見つかりました。詳細は
+同じfield runから、v1.1.3へ持ち込むGit porcelain path parsing、launcher/CLI/Skill version skew、Windows予約device名
+fingerprint診断の3件も見つかりました。その後のrisk-triggered pre-release security reviewで4件目となるunsigned live run/task authorityも見つかり、field runの歴史を書き換えずv1.1.3へ追加hardeningしています。詳細は
 [Case Study #2 — MandateMarshal 日本語版](docs/CASE_STUDY_02_MANDATEMARSHAL.ja.md)（[English](docs/CASE_STUDY_02_MANDATEMARSHAL.md)）を参照してください。
 
 ### 1コマンドで導入
@@ -145,11 +145,11 @@ Coding Agentは、調査前に実装を始める、既存OSSを再実装する�
 - **横断的なCapability Map**：Skill、MCP、プラグイン、ライブラリ、CLI、参考OSSを区別します。
 - **Supply Chain防御**：pin、hash、provenance、install hook検査、最小権限、承認ゲート、rollback receipt。
 - **Architecture Freeze**：再調査は重大条件に限定し、回数上限を持ちます。
-- **Authoritative live run**：1つのbounded jobに対してRUNNING runは1本だけ。nested workspaceは親Gitを所有repoとして誤認せず、正当なrepo bootstrapはlineage migrationとして記録します。
+- **Authenticated live authority**：1つのbounded jobに対してRUNNING runは1本だけ。live `run.json`とcanonical task graphはユーザー領域のHMACで保護し、repository内容からphase/COMPLETE権限を偽造できないようfail-closedにします。nested workspaceは親Gitを所有repoとして誤認せず、正当なrepo bootstrapはlineage migrationとして記録します。
 - **Live activity budget**：観測可能なCodex作業をCore側のcounterへ接続し、実作業したのに`used=0`の帳簿を残しません。
-- **Canonical Task Graph**：machine-readableなtask状態と証拠を正本にし、Markdown viewへ同期して`COMPLETE`をgateします。
+- **Canonical Task Graph**：HMAC認証されたmachine-readableなtask状態と証拠を正本にし、Markdown viewへ同期して`COMPLETE`をgateします。
 - **有限停止ハーネス**：予算、同一failure fingerprint、停滞、scope driftを検出します。
-- **Checkpoint / Resume**：ユーザー領域のHMAC署名でcheckpoint判断を保護し、入力が変わらない限り完了済み範囲を再計算しません。
+- **Checkpoint / Resume**：同じユーザー領域HMACのintegrity境界でcheckpointとacquisition receiptも保護し、入力が変わらない限り完了済み範囲を再計算しません。
 - **Agent非依存Core**：v1はCodex Adapter、将来は他Agent Adapterへ拡張可能です。
 
 ## 起動方法

@@ -11,8 +11,9 @@ or `PRIVILEGED`. In guarded mode, only read-only and bounded project writes may 
 automatic. Unknown commands, interpreters, compound shell expressions, and destructive
 writes fail closed and require approval. Preserve dirty state, validate run identifiers,
 reject release symlinks and workspace escape, use minimum privilege, separate reads from
-writes, redact logs, HMAC-sign receipts outside the repository, bind rollback to the exact
-installed file and its recorded hash, and stop when safety is uncertain.
+writes, redact logs, HMAC-authenticate live run/task authority, checkpoints, and receipts with a
+user-local key outside the repository, bind rollback to the exact installed file and its recorded
+hash, and stop when safety is uncertain.
 
 StackMarshal never self-updates during a run, rewrites its own Skill definition,
 recursively invokes itself, or delegates orchestration authority to a candidate.

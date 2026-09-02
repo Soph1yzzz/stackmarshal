@@ -38,3 +38,9 @@ python -m twine check dist/*
 ```
 
 Run the relevant subset during iteration and the full set before release.
+
+Release security assurance is risk-triggered, not tied mechanically to every version. Every
+release receives CI, CodeQL, adversarial/relevant regression tests, and a focused source-backed
+security review of changed trust boundaries. A full Codex Security repository scan is reserved
+for material security-boundary or architectural changes and is decided with the owner under
+`docs/RELEASE_CHECKLIST.md`; if it is skipped, record the compensating review evidence honestly.

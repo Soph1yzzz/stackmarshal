@@ -2,18 +2,20 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
-## [1.1.3] - 2026-09-01
+## [1.1.3] - 2026-09-02
 
 ### Fixed
 
 - Preserve leading Git porcelain status columns so terminal-seal dirty paths are recorded exactly instead of dropping the first filename character.
 - Expand `doctor` with non-executing launcher/package/managed-install provenance and explicit multi-version StackMarshal skew detection.
 - Detect Windows reserved device names during workspace fingerprinting and report the actual cause while remaining fail-closed.
+- Authenticate canonical live `run.json` and `task-graph.json` with the user-local integrity key so unsigned or modified repository state cannot become execution/completion authority.
 
 ### Documentation
 
 - Add Case Study #2 for MandateMarshal v0.2 durable-runtime/crash-recovery field dogfooding, including the completion gate rejecting stale verification after a late source change.
 - Split the roadmap so runtime-trust fixes land in v1.1.3 and non-invasive init, delivery audit, and compact CLI output remain v1.1.4 work.
+- Adopt risk-triggered full repository security scans while keeping focused source review, adversarial regressions, CI, and CodeQL mandatory for every release.
 
 ## [1.1.2] - 2026-08-23
 

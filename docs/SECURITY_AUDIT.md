@@ -41,19 +41,41 @@ path.
 - Result: passed
 - GitHub Actions are pinned to immutable commit SHA and use Node 24-compatible major versions.
 
-The immutable release commit receives a separate final Codex Security scan plus fresh CI and
-CodeQL runs. Their authoritative scan ID, commit, run IDs, and asset verification are recorded
-in the published GitHub v1.0.0 release notes so this repository does not require a post-scan
-metadata commit.
+This historical baseline predates the current risk-triggered release policy. Current releases
+always require focused source-backed security review, relevant adversarial regression tests, fresh
+CI, and CodeQL; a full Codex Security repository scan is added only when the changed trust boundary
+or architecture justifies its model/usage cost. When a full scan is skipped, release evidence must
+state the compensating review rather than implying an independent scan occurred.
 
 ## v1.1 installer review scope
 
-The v1.1 release adds a separate installation/update boundary. Its final release scan covers the
+The v1.1 release added a separate installation/update boundary. That boundary includes the
 PowerShell and Bash bootstraps, strict Release checksum verification, dedicated venv creation,
 safe Skill archive extraction, atomic CLI/Skill replacement, rollback, modified-Skill backup,
 version synchronization, guarded prerequisite/PATH/downgrade actions, CI smoke tests, and the
-fresh-install audit. The authoritative final scan ID and immutable commit are recorded in the
-published v1.1.0 GitHub Release body.
+fresh-install audit. Changes to this boundary are examples that trigger an explicit discussion
+about a full repository scan under the current release policy.
+
+## v1.1.3 risk-triggered pre-release scan attempt
+
+A full Standard repository scan was deliberately attempted for v1.1.3 because the patch touched
+runtime trust, launcher provenance, and fingerprint behavior.
+
+- Scan ID: `8c22f190-b4ca-4d35-9b08-c287ea3f2657`
+- Target revision: `3abd8433009c020417695b1c12612c673ca70902`
+- Scope: 122 tracked files
+- Progress reached: validation, 122 / 122 files
+- Canonical SDK artifacts: not sealed/generated; the headless session stalled after validation and
+  was stopped instead of continuing to consume Sol usage indefinitely
+- Source-backed issue identified during validation: repository-controlled unsigned live `run.json`
+  and canonical task-graph state could be trusted as execution/completion authority even though
+  checkpoint and acquisition records already used a user-local HMAC
+
+The final v1.1.3 candidate remediates that issue by HMAC-authenticating live run state and task
+state with the same user-local integrity key and rejecting unsigned or modified canonical state.
+Adversarial tests cover forged phase/completion state and forged task evidence. The full scan is
+not claimed as a passing final scan; the remediated release uses the standard focused source-backed
+review, targeted adversarial tests, CI, and CodeQL gates defined in `RELEASE_CHECKLIST.md`.
 
 ## Scope limitation
 

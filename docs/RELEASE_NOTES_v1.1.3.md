@@ -4,9 +4,9 @@ StackMarshal v1.1.3 is a runtime-trust hardening patch derived from real OSS fie
 MandateMarshal v0.2 durable-runtime and crash-recovery development. It intentionally does not add
 new adapters, orchestration modes, or operator-UX features.
 
-The release focuses on three places where StackMarshal's own execution/evidence path must be
-trustworthy: terminal Git status parsing, installation/launcher version provenance, and Windows
-workspace fingerprint diagnostics.
+The release focuses on four places where StackMarshal's own execution/evidence path must be
+trustworthy: terminal Git status parsing, installation/launcher version provenance, Windows
+workspace fingerprint diagnostics, and authenticated live run/task authority.
 
 ## Fixed
 
@@ -56,6 +56,30 @@ v1.1.3 detects reserved path components before resolve/read operations:
 The fingerprint remains fail-closed. Reserved-name entries are not silently omitted from terminal
 evidence.
 
+### Live run and task authority is HMAC-authenticated
+
+A risk-triggered pre-release security review identified a trust asymmetry: checkpoints and
+acquisition receipts were protected by the user-local integrity key, but canonical live `run.json`
+and `task-graph.json` could still be accepted after repository-local modification. In a repository
+that already contained forged StackMarshal state, that could influence active-run selection,
+phase/progress authority, mandatory task evidence, finalization, and the path toward `COMPLETE`.
+
+v1.1.3 now signs live run state and canonical task state with the same user-local
+`hmac-sha256-v1` integrity boundary and verifies the signature before accepting either file as
+authority. Unsigned or modified canonical state fails closed. Regression tests cover forged live
+phase/completion state, forged task completion/evidence, and unsigned repository-supplied state.
+The shared signing key remains outside the repository.
+
+## Security review outcome
+
+A full Codex Security Standard scan was attempted because v1.1.3 touches runtime trust. Scan
+`8c22f190-b4ca-4d35-9b08-c287ea3f2657` reached validation coverage of 122 / 122 tracked files on
+commit `3abd8433009c020417695b1c12612c673ca70902` and surfaced the live-authority issue above. The
+headless SDK session then stalled before writing/sealing canonical scan artifacts, so it is **not**
+claimed as a passing final full scan and was stopped rather than consuming Sol usage indefinitely.
+The remediated candidate is gated by focused source-backed security review, targeted adversarial
+regressions, CI, and CodeQL under the project's risk-triggered scan policy.
+
 ## Field evidence
 
 [Case Study #2 — MandateMarshal v0.2](CASE_STUDY_02_MANDATEMARSHAL.md) records the field run that
@@ -83,7 +107,10 @@ See [FUTURE_WORK.md](FUTURE_WORK.md) for the version roadmap.
 
 ## Compatibility
 
-v1.1.3 does not change the StackMarshal state schema, checkpoint schema, task-graph schema, mode
-model, approval boundary, or release-asset format. Existing v1.1.x state/evidence contracts remain
-in place. The patch changes diagnostics and corrects terminal path evidence without weakening any
-completion or fingerprint gate.
+v1.1.3 does not bump the public run-state or task-graph schema version, mode model, approval
+boundary, checkpoint schema, or release-asset format. Generated live `run.json` and
+`task-graph.json` now include an additive integrity envelope, and runtime trust is intentionally
+stricter: unsigned legacy live state/task state is not accepted as canonical execution authority.
+Users with an in-progress pre-v1.1.3 run should preserve its signed checkpoint evidence and start
+or reconstruct trusted live state rather than blindly blessing an unsigned repository copy. This
+security hardening does not weaken any completion or fingerprint gate.

@@ -46,14 +46,31 @@
 - [x] zero required runtime dependencies
 - [x] deterministic source, Skill, bootstrap, and Python package artifacts
 - [x] portable SHA256SUMS, SBOM, provenance, and release manifest
-- [x] final Codex Security scan on the immutable release commit is mandatory
+- [x] every release receives focused source-backed security review of changed trust boundaries plus relevant adversarial/regression tests
+- [x] full Codex Security repository scan is risk-triggered, not mandatory for every version
 - [x] public GitHub Actions and CodeQL success on the release commit is mandatory
 - [x] release manifest records passing component version-coherence evidence
 - [x] terminal StackMarshal builds finalize bookkeeping before COMPLETE and record a non-mutating terminal repository seal
 - [x] tag-to-commit, GitHub asset digests, downloaded checksums, and clean-install verification are mandatory
 
-The release commit is immutable after its final security scan. Authoritative scan metadata, CI
-and CodeQL run IDs, tag-to-commit verification, and published asset verification are recorded in
-the GitHub Release body so no post-scan metadata commit is required. Version-specific counts,
-coverage percentages, commits, and asset digests belong in immutable release notes/evidence rather
-than this living checklist.
+### Security scan trigger
+
+The default release path is the full automated quality gate, CodeQL, relevant adversarial tests,
+and a focused source-backed security review of the changed trust boundaries. A full Codex Security
+repository scan is reserved for changes that materially alter security or execution authority,
+including installer/bootstrap/update/PATH behavior, command approval or privilege boundaries,
+checkpoint/signing/secret handling, workspace/path/archive containment, network/publication or
+supply-chain behavior, authentication/cryptography, or a large architectural refactor. When a
+trigger is present, the owner and maintainer explicitly decide whether the additional full scan is
+worth its model/usage cost; a lower-cost model may be used only when that scan mode is validated to
+work adequately. If the full scan is skipped, the release evidence records why and identifies the
+compensating focused review and tests. A known unresolved material security finding still blocks
+release regardless of scan mode.
+
+When a full scan is used, its target code-bearing commit remains immutable. A later documentation-
+only governance/evidence commit does not require another full scan when the diff is verified to be
+non-executable and the final commit still passes CI, CodeQL, and the focused security review. CI
+and CodeQL run IDs, optional full-scan metadata, tag-to-commit verification, and published asset
+verification are recorded in the GitHub Release body. Version-specific counts, coverage
+percentages, commits, and asset digests belong in immutable release notes/evidence rather than this
+living checklist.
