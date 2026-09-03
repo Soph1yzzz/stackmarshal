@@ -122,10 +122,10 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 ```
 
 The installer uses a dedicated virtual environment, installs the matching Codex Skill, verifies
-versioned Release assets, and runs a post-install doctor check. In v1.1.3, `doctor` also surfaces
-managed/PATH launcher provenance and known version skew instead of assuming every `stackmarshal`
-command on the machine resolves to the same installation. The detailed installation, security,
-CLI, state, release, and development contracts remain below.
+versioned Release assets, and runs a post-install doctor check. After that first bootstrap, v1.1.4
+makes `stackmarshal pin latest` the normal update command and `stackmarshal version` the quick
+runtime/pin/Skill/launcher drift check. The detailed installation, security, CLI, state, release,
+and development contracts remain below.
 
 ## Detailed overview
 
@@ -198,16 +198,25 @@ irm https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.p
 curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.sh | bash
 ```
 
-Run the same command again to update to the latest stable release or repair the installed
-version. Pin a reproducible version when required:
-
-```powershell
-& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.3/install.ps1))) -Version v1.1.3
-```
+After the one-time bootstrap, normal updates and version management use the CLI itself:
 
 ```bash
-curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.3/install.sh | bash -s -- --version v1.1.3
+stackmarshal pin latest
+stackmarshal pin status
+stackmarshal version
 ```
+
+Pin an exact release when reproducibility matters:
+
+```bash
+stackmarshal pin 1.1.4
+```
+
+`stackmarshal version` is the human check: it reports the running CLI, exact managed pin,
+installed Skill, resolved launcher, and `OK` / `DRIFTED` status. `stackmarshal --version`
+continues to print only the runtime version for scripts. `pin` downloads the selected published
+Release bootstrap, verifies that bootstrap against the Release `SHA256SUMS`, and then delegates to
+the existing atomic installer, so update/repair/rollback logic remains single-sourced.
 
 Git and Python 3.11 or newer are prerequisites. When either is missing, the bootstrap explains
 what it found and asks before using the operating-system package manager. It also asks before
@@ -224,17 +233,20 @@ after restart before work can begin.
 For a Skill-only manual installation, use the matching release tag:
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.3/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.4/skills/stackmarshal
 ```
 
 ## Quick CLI tour
 
 ```bash
+stackmarshal --version
+stackmarshal version
+stackmarshal pin status
 stackmarshal init
 stackmarshal invocation "Use StackMarshal to build this"
 stackmarshal start --mode build --budget standard \
   --invocation "Use StackMarshal to build this"
-stackmarshal doctor --host-skill-version 1.1.3
+stackmarshal doctor --host-skill-version 1.1.4
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -363,7 +375,7 @@ behavior is a v1 release requirement.
 `python scripts/build_release.py` resolves the current version from `pyproject.toml` and produces:
 
 - `install.ps1`, `install.sh`, and the shared verified `installer.py`
-- `stackmarshal-skill-v1.1.3.zip`
+- `stackmarshal-skill-v1.1.4.zip`
 - Python wheel and source distribution
 - source archive
 - `SHA256SUMS`

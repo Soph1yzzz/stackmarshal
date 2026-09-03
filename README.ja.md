@@ -116,10 +116,10 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 ```
 
 installerは専用virtual environmentへCLIを隔離導入し、対応するCodex Skillを配置し、versioned
-Release assetsを検証してpost-install doctorまで実行します。v1.1.3の`doctor`は、同じPC上の
-managed/PATH launcher provenanceと既知のversion skewも表示し、すべての`stackmarshal` commandが
-同じinstallationを指しているとは仮定しません。詳細な導入、Security、CLI、state、release、
-development contractは以下の既存説明を維持しています。
+Release assetsを検証してpost-install doctorまで実行します。初回bootstrap後はv1.1.4から
+`stackmarshal pin latest`を通常updateに使い、`stackmarshal version`でruntime / pin / Skill /
+launcherのdriftをすぐ確認できます。詳細な導入、Security、CLI、state、release、development
+contractは以下の既存説明を維持しています。
 
 ## 詳細概要
 
@@ -190,16 +190,24 @@ irm https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.p
 curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.sh | bash
 ```
 
-同じcommandを再実行すると、最新stableへのupdate、または同versionのrepairになります。
-再現性のためversionを固定する場合：
-
-```powershell
-& ([scriptblock]::Create((irm https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.3/install.ps1))) -Version v1.1.3
-```
+初回bootstrap後の通常updateとversion管理はCLI自身で行えます。
 
 ```bash
-curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/download/v1.1.3/install.sh | bash -s -- --version v1.1.3
+stackmarshal pin latest
+stackmarshal pin status
+stackmarshal version
 ```
+
+再現性のためexact releaseへ固定する場合：
+
+```bash
+stackmarshal pin 1.1.4
+```
+
+`stackmarshal version`は人間向け確認で、実行中CLI、managed pin、installed Skill、resolved launcher、
+`OK` / `DRIFTED`をまとめて表示します。`stackmarshal --version`はscript向けにruntime versionだけを
+返します。`pin`は選択したpublished ReleaseのbootstrapをRelease `SHA256SUMS`で検証してから既存の
+atomic installerへ委譲するため、update / repair / rollbackロジックは二重実装しません。
 
 GitとPython 3.11以上が前提です。未導入の場合は、検出結果を説明した上でOS package managerを
 使ってよいか確認します。user `PATH`の変更、または編集済み・installer管理外のSkill置換にも
@@ -214,17 +222,20 @@ restart-pending markerを残します。再起動前の古いSkillはStackMarsha
 Skillだけを手動導入する場合も、`main`ではなく対応するRelease tagへ固定します。
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.3/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.4/skills/stackmarshal
 ```
 
 ## CLI例
 
 ```bash
+stackmarshal --version
+stackmarshal version
+stackmarshal pin status
 stackmarshal init
 stackmarshal invocation "StackMarshalを使って実装して"
 stackmarshal start --mode build --budget standard \
   --invocation "StackMarshalを使って実装して"
-stackmarshal doctor --host-skill-version 1.1.3
+stackmarshal doctor --host-skill-version 1.1.4
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check

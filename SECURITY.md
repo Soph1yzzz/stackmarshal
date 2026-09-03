@@ -40,7 +40,9 @@ StackMarshal is not a sandbox. The user-local integrity signing key protects liv
 canonical task state, checkpoints, and acquisition receipts against repository-local tampering;
 it does not protect against malware already executing as the same OS user. The host Codex
 environment and operator remain responsible for OS-level isolation, credentials, network
-controls, and reviewing publication or privileged actions.
+controls, and reviewing publication or privileged actions. Explicit `stackmarshal pin` version
+management accepts only published stable GitHub Releases, verifies the selected bootstrap against
+that Release's `SHA256SUMS`, and delegates all mutation to the existing atomic installer.
 
 ## Release security assurance
 

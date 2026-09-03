@@ -2,6 +2,19 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
+## [1.1.4] - 2026-09-03
+
+### Added
+
+- Add `stackmarshal pin latest`, exact-version `stackmarshal pin <version>`, and `stackmarshal pin status` using the existing verified atomic installer.
+- Add human `stackmarshal version` output that reports runtime, managed pin, Skill, launcher, and `OK` / `DRIFTED` status while preserving script-friendly `stackmarshal --version`.
+- Verify the selected published Release bootstrap against its `SHA256SUMS` before `pin` executes it.
+
+### Changed
+
+- Treat stale StackMarshal launchers later on `PATH` as visible shadowed-version warnings rather than blocking skew when the resolved managed launcher, Skill, and runtime are aligned.
+- Move the previously planned non-invasive init, delivery audit, and compact CLI work from v1.1.4 to v1.1.5 without expanding this release scope.
+
 ## [1.1.3] - 2026-09-02
 
 ### Fixed

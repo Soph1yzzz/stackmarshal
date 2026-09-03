@@ -18,7 +18,7 @@ boundaries.
 
 - Prompt injection: evidence-only handling and no candidate orchestration authority.
 - Malicious/typosquatted dependency: canonical source, score, license, pin, hash, PoC.
-- Installer/bootstrap substitution: versioned GitHub Release URLs, strict SHA256SUMS parsing, verified shared installer and payloads, dedicated venv, `--no-index --no-deps`, and post-install doctor.
+- Installer/bootstrap substitution: versioned GitHub Release URLs, strict SHA256SUMS parsing, `stackmarshal pin` verification of the selected bootstrap itself, verified shared installer and payloads, canonical GitHub pin targets with inherited repository/release-base overrides removed, dedicated venv, `--no-index --no-deps`, and post-install doctor.
 - Release evidence substitution or path escape: flat expected asset-set enforcement, checksum target containment/symlink/duplicate rejection, manifest artifact hash/size checks, component-version coherence, clean provenance, rejection of hidden Git index flags and ignored artifact-contaminating inputs, safe root-level build-output cleanup, and manifest/provenance binding to the expected immutable Git HEAD.
 - Release-version drift: `pyproject.toml` is authoritative; CI/release gates fail closed when Core, Skill, smoke resolution, Skill readiness commands, or living documentation diverge.
 - Installer archive escape: regular-file-only Skill extraction, canonical path containment, duplicate rejection, and symlink rejection.
@@ -30,7 +30,7 @@ boundaries.
 - Infinite loops or repository-driven policy weakening: project configuration may only tighten bounded budgets and cannot select the deep profile, disable mandatory approvals, or weaken guarded autonomy; larger deep budgets require explicit user CLI selection. Progress tests, failure fingerprints, and replan caps remain enforced by the Core.
 - Forged live or resume state: canonical live `run.json` and `task-graph.json`, checkpoints, and acquisition receipts are authenticated with a user-local HMAC key kept outside the repository; unsigned or modified authority is rejected before use. Resume additionally validates repository-lineage identity, exact tracked/staged/untracked worktree fingerprint, strict HEAD and dirty-state checks, and lock verification.
 - False completion: mandatory acceptance evidence required for `COMPLETE`, live run/task authority must pass HMAC verification, final verification is bound to a terminal deliverable fingerprint, finalization seals StackMarshal-owned bookkeeping before terminal transition, and post-finalization deliverable/build/release mutations invalidate `COMPLETE`.
-- Runtime self expansion: no runtime self-update, self-rewrite, recursive invocation, or delegated control. Version installation and update are handled by the separate, versioned bootstrap/installer boundary.
+- Runtime self expansion: no implicit self-update during a StackMarshal workflow, self-rewrite, recursive invocation, or delegated control. Explicit operator `stackmarshal pin` is a separate version-management command that verifies a published Release bootstrap and delegates installation/update to the versioned installer boundary.
 
 ## Residual risk
 

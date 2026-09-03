@@ -111,11 +111,27 @@ an arbitrary executable merely because it is named `stackmarshal`; version evide
 from the current invocation, installer-managed launcher text/state, and bounded package metadata
 inspection. This keeps doctor from widening the supply-chain trust boundary while diagnosing it.
 
+## v1.1.4 pin/version addendum
+
+v1.1.4 turns those diagnostics into the normal update workflow. After the first bootstrap,
+`stackmarshal pin latest` or `stackmarshal pin <version>` resolves a published stable Release,
+downloads that Release's `SHA256SUMS`, verifies the platform bootstrap itself, and only then
+executes the existing installer. Canonical GitHub repository/release-base environment overrides
+are removed from the delegated bootstrap so an inherited environment cannot silently redirect the
+verified pin to another repository. The atomic installer remains the only implementation of venv,
+Skill, rollback, PATH, downgrade, and restart-marker behavior.
+
+`stackmarshal version` and `stackmarshal pin status` compare the running CLI with the installer
+state, installed Skill, and PATH-resolved launcher. Older launchers later on PATH remain visible as
+shadowed warnings but do not create a false repair blocker when the resolved managed launcher and
+authoritative components agree.
+
 ## Residual limitations
 
-- The first bootstrap script is trusted through HTTPS delivery from the GitHub Release. It then
-  verifies the shared installer and every payload; this does not protect against compromise of the
-  GitHub account or Release itself.
+- The one-time first bootstrap script is trusted through HTTPS delivery from the GitHub Release.
+  Subsequent `stackmarshal pin` updates additionally verify the selected bootstrap against the
+  Release `SHA256SUMS`. Neither path protects against compromise of the GitHub account or Release
+  itself.
 - Automatic prerequisite installation necessarily changes the operating system and may require
   administrator credentials. It is never attempted without approval unless `--yes` / `-Yes` was
   explicitly supplied.

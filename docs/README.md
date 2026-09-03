@@ -25,6 +25,7 @@ Use [REQUIREMENTS_TRACEABILITY.md](REQUIREMENTS_TRACEABILITY.md) to map requirem
 ## Release
 
 - [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) — current release process and required gates.
+- [RELEASE_NOTES_v1.1.4.md](RELEASE_NOTES_v1.1.4.md) — v1.1.4 pin/version workflow and managed version-skew convergence.
 - [RELEASE_NOTES_v1.1.3.md](RELEASE_NOTES_v1.1.3.md) — v1.1.3 runtime-trust hardening derived from MandateMarshal field use.
 - [RELEASE_NOTES_v1.1.2.md](RELEASE_NOTES_v1.1.2.md) — v1.1.2 release and terminal-integrity hardening.
 - [RELEASE_NOTES_v1.1.1.md](RELEASE_NOTES_v1.1.1.md) — RepoHealth-driven live-orchestration hardening.

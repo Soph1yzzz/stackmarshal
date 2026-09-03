@@ -77,17 +77,17 @@ workspaceにはignoredな0 byte artifact `NUL`が存在し、workspace fingerpri
 
 現行`stackmarshal init`はStackMarshal run state用patternをproject `.gitignore`へ追加します。現在の設計としては意図的ですが、orchestrator bookkeepingだけでtarget repoをdirtyにしたくない運用が実使用で確認されました。
 
-これはv1.1.4へ分離し、`.git/info/exclude`またはrepo外stateを利用するlocal / non-invasive init modeとして検討します。
+これは当初v1.1.4へ分離しましたが、v1.1.4をpin/version workflowだけに絞ったため、`.git/info/exclude`またはrepo外stateを利用するlocal / non-invasive init modeは内容を変えずv1.1.5へ移動します。
 
 ### 5. `audit`はdelivery auditではなくenvironment inventory
 
 現行`stackmarshal audit`はenvironmentとnative capability inventoryを生成します。field reportでは、changed files、mandatory task acceptance/evidence、verification freshness、unresolved failures、finalize readinessを横断する最終reviewを期待していました。
 
-より広いdelivery reviewはv1.1.4へ分離します。既存environment auditは有用なので、暗黙に意味を変えるのではなくscopeを明示的に分離する方針です。
+より広いdelivery reviewは当初v1.1.4へ分離しましたが、pin/version scope決定後は内容を変えずv1.1.5へ移動します。既存environment auditは有用なので、暗黙に意味を変えるのではなくscopeを明示的に分離する方針です。
 
 ### 6. Human CLIとしては出力がverbose
 
-phase transition時にfull run JSONが出るため、machine outputとしては強い一方、interactive terminalでは流量が多いという指摘がありました。compact human default + 明示的full JSON modeはv1.1.4へ分離します。
+phase transition時にfull run JSONが出るため、machine outputとしては強い一方、interactive terminalでは流量が多いという指摘がありました。compact human default + 明示的full JSON modeは当初v1.1.4へ分離しましたが、現在roadmapではv1.1.5へ移動しています。
 
 ## v1.1.3への反映
 
@@ -97,7 +97,7 @@ Case Study #2からv1.1.3のruntime-trust hardening scopeを次の3点に固定�
 2. `doctor`でlauncher / CLI / Skill / managed installのversion skewを検出・可視化する。
 3. Windows予約device名をworkspace fingerprintで専用診断し、fail-closed evidence semanticsを維持する。
 
-repo非侵襲init、delivery audit、compact CLI outputはv1.1.4へ分離し、v1.1.3をexecution/evidence trustの修正に限定します。
+repo非侵襲init、delivery audit、compact CLI outputはv1.1.3から次patchへ分離しました。当初はv1.1.4予定でしたが、v1.1.4をpin/version管理へ絞ったため、現在roadmapではv1.1.5です。
 
 その後のpre-release security reviewで、このfield run由来ではない4件目のv1.1.3 trust issueも見つかりました。checkpointとacquisition receiptにはユーザー領域integrity認証がある一方、live runとcanonical task authorityには同等の保護がありませんでした。v1.1.3ではこの差も閉じています。field runが発見したと後付けしないため、この内容は後日談として分離して記録します。
 

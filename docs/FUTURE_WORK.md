@@ -1,6 +1,6 @@
 # Future Work
 
-Items intentionally outside the v1.1.3 runtime-trust hardening scope:
+Items intentionally outside the v1.1.4 version-management scope:
 
 - Claude Code, Gemini CLI, Cline, GitHub Copilot, and OpenHands adapters.
 - Multi-agent research/build/review orchestration.
@@ -19,7 +19,11 @@ are release history, not future roadmap scope; see [RELEASE_NOTES_v1.1.3.md](REL
 
 The next intended sequencing is:
 
-- **v1.1.4 — Operator UX / non-invasive operation**
+- **v1.1.4 — Pin/version workflow**
+  - `stackmarshal pin latest`, exact-version pinning, and pin status,
+  - human `stackmarshal version` drift view while preserving script-friendly `--version`,
+  - reuse of the verified atomic installer rather than a second update implementation.
+- **v1.1.5 — Operator UX / non-invasive operation**
   - local/non-invasive initialization that does not dirty the target repository,
   - separate environment inventory from delivery-quality audit,
   - compact human CLI output with explicit full JSON mode.

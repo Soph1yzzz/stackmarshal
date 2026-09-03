@@ -22,6 +22,7 @@ from .constants import Mode, Phase, STATE_DIR, Status, __version__
 from .failure import fingerprint
 from .lock import verify_lock
 from .models import ProgressSnapshot
+from .pinning import PinError, install_pin
 from .progress import evaluate
 from .scoring import score_candidate
 from .state import (
@@ -676,12 +677,11 @@ def _path_stackmarshal_candidates() -> list[dict[str, Any]]:
     return candidates
 
 
-def cmd_doctor(args: argparse.Namespace) -> int:
+def _doctor_payload(host: str | None) -> dict[str, Any]:
     codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
     skill_path = codex_home / "skills" / "stackmarshal" / "SKILL.md"
     restart_marker = codex_home / ".stackmarshal-restart-required.json"
     installed = _skill_version(skill_path)
-    host = args.host_skill_version
     restart_required = host is not None and host != __version__
     restart_pending = restart_marker.is_file()
     marker_version: str | None = None
@@ -709,6 +709,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     resolved_launcher = shutil.which("stackmarshal")
     resolved_launcher_version: str | None = None
     resolved_launcher_metadata_versions: list[str] = []
+    resolved_key: str | None = None
     if resolved_launcher is not None:
         resolved_key = _normalized_path(Path(resolved_launcher))
         for candidate in path_candidates:
@@ -726,31 +727,50 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         ):
             resolved_launcher_version = managed_version
 
-    known_versions = {__version__}
-    if managed_version is not None:
-        known_versions.add(managed_version)
+    authoritative_versions = {__version__}
+    for value in (installed, managed_version, resolved_launcher_version):
+        if value:
+            authoritative_versions.add(value)
+    known_versions = set(authoritative_versions)
+    shadowed_versions: set[str] = set()
     for candidate in path_candidates:
+        candidate_key = _normalized_path(Path(str(candidate["path"])))
         version = candidate.get("version")
-        if version:
-            known_versions.add(str(version))
         metadata = candidate.get("metadata_versions", [])
+        candidate_versions = {str(version)} if version else set()
         if isinstance(metadata, list):
-            known_versions.update(str(item) for item in metadata if item)
-    version_skew = len(known_versions) > 1
-    repair_required = installed != __version__ or version_skew or managed_state_error is not None
+            candidate_versions.update(str(item) for item in metadata if item)
+        known_versions.update(candidate_versions)
+        if resolved_key is None or candidate_key != resolved_key:
+            shadowed_versions.update(candidate_versions)
+
+    managed_launcher_mismatch = False
+    if managed_launcher is not None and resolved_launcher is not None:
+        managed_launcher_mismatch = _normalized_path(Path(managed_launcher)) != _normalized_path(Path(resolved_launcher))
+    version_skew = len(authoritative_versions) > 1 or managed_launcher_mismatch
+    repair_required = (
+        installed != __version__
+        or (managed_version is not None and managed_version != __version__)
+        or version_skew
+        or managed_state_error is not None
+    )
 
     warnings: list[str] = []
     if version_skew:
         warnings.append("stackmarshal_version_skew")
     if len(path_candidates) > 1:
         warnings.append("multiple_stackmarshal_launchers_on_path")
+    if shadowed_versions - authoritative_versions:
+        warnings.append("shadowed_stackmarshal_versions")
     if resolved_launcher is not None and resolved_launcher_version is None:
         warnings.append("resolved_launcher_version_unverified")
+    if managed_launcher_mismatch:
+        warnings.append("managed_launcher_not_resolved_first")
     if managed_state_error is not None:
         warnings.append(managed_state_error)
 
     ready = not restart_required and not repair_required and not restart_pending
-    _json({
+    return {
         "ready": ready,
         "cli_version": __version__,
         "installed_skill_version": installed,
@@ -760,7 +780,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         "restart_marker_version": marker_version,
         "repair_required": repair_required,
         "version_skew": version_skew,
+        "authoritative_versions": sorted(authoritative_versions),
         "known_versions": sorted(known_versions),
+        "shadowed_versions": sorted(shadowed_versions - authoritative_versions),
         "invoked_cli": {
             "entrypoint": sys.argv[0],
             "python": sys.executable,
@@ -780,8 +802,99 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         },
         "warnings": warnings,
         "skill_path": str(skill_path),
+    }
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    payload = _doctor_payload(args.host_skill_version)
+    _json(payload)
+    return 0 if payload["ready"] else EXIT_INVALID_STATE
+
+
+def _pin_status_payload() -> dict[str, Any]:
+    doctor = _doctor_payload(None)
+    managed = doctor["managed_install"]
+    managed_version = managed.get("version") if isinstance(managed, dict) else None
+    state_error = managed.get("state_error") if isinstance(managed, dict) else None
+    if managed_version is None and state_error is None:
+        status = "unpinned"
+    else:
+        aligned = (
+            isinstance(managed_version, str)
+            and doctor["installed_skill_version"] == managed_version
+            and doctor["path_resolution"]["resolved_launcher_version"] == managed_version
+            and not doctor["version_skew"]
+            and state_error is None
+        )
+        status = "pinned" if aligned else "drifted"
+    return {
+        "status": status,
+        "version": __version__,
+        "pinned_version": managed_version,
+        "installed_skill_version": doctor["installed_skill_version"],
+        "resolved_launcher_version": doctor["path_resolution"]["resolved_launcher_version"],
+        "managed_install": managed,
+        "warnings": doctor["warnings"],
+    }
+
+
+def cmd_pin(args: argparse.Namespace) -> int:
+    target = args.target
+    if target == "status":
+        payload = _pin_status_payload()
+        _json(payload)
+        return EXIT_INVALID_STATE if payload["status"] == "drifted" else 0
+
+    version = install_pin(
+        target,
+        assume_yes=args.yes,
+        force=args.force,
+        allow_downgrade=args.allow_downgrade,
+        no_path=args.no_path,
+    )
+    managed_root = _default_managed_install_root()
+    managed_state, state_error = _read_managed_install_state(managed_root)
+    managed_version = managed_state.get("version") if isinstance(managed_state, dict) else None
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+    skill_version = _skill_version(codex_home / "skills" / "stackmarshal" / "SKILL.md")
+    launcher_version: str | None = None
+    if isinstance(managed_state, dict):
+        cli_state = managed_state.get("cli")
+        if isinstance(cli_state, dict) and isinstance(cli_state.get("launcher"), str):
+            launcher_version = _launcher_package_version(Path(cli_state["launcher"]))
+    if state_error is not None or managed_version != version or skill_version != version or launcher_version != version:
+        raise PinError(
+            "Pin verification failed after installer success: "
+            f"target={version}, managed={managed_version}, skill={skill_version}, launcher={launcher_version}, state={state_error}"
+        )
+    _json({
+        "status": "pinned",
+        "version": version,
+        "ref": f"v{version}",
+        "restart_codex": True,
+        "note": "Start a new Codex session so the pinned Skill is loaded.",
     })
-    return 0 if ready else EXIT_INVALID_STATE
+    return 0
+
+
+def cmd_version(args: argparse.Namespace) -> int:
+    payload = _pin_status_payload()
+    status = payload["status"]
+    display = "UNPINNED" if status == "unpinned" else ("OK" if status == "pinned" else "DRIFTED")
+    pin = payload["pinned_version"]
+    print(
+        "\n".join(
+            [
+                f"StackMarshal {__version__}",
+                f"Pin: {'none' if pin is None else f'v{pin}'}",
+                f"Managed CLI: {payload['managed_install'].get('version') if isinstance(payload['managed_install'], dict) else 'not installed'}",
+                f"Skill: {payload['installed_skill_version'] or 'not installed'}",
+                f"Launcher: {payload['resolved_launcher_version'] or 'unverified'}",
+                f"Status: {display}",
+            ]
+        )
+    )
+    return EXIT_INVALID_STATE if status == "drifted" else 0
 
 
 def _read_json(path: str) -> dict[str, Any]:
@@ -1113,6 +1226,17 @@ def build_parser() -> argparse.ArgumentParser:
     invocation.add_argument("text")
     invocation.set_defaults(func=cmd_invocation)
 
+    pin = sub.add_parser("pin")
+    pin.add_argument("target", nargs="?", default="status", help="status, latest, or vMAJOR.MINOR.PATCH")
+    pin.add_argument("--yes", action="store_true", help="accept installer dependency/PATH prompts")
+    pin.add_argument("--force", action="store_true", help="back up and replace a modified/unmanaged Skill")
+    pin.add_argument("--allow-downgrade", action="store_true")
+    pin.add_argument("--no-path", action="store_true")
+    pin.set_defaults(func=cmd_pin)
+
+    version = sub.add_parser("version")
+    version.set_defaults(func=cmd_version)
+
     doctor = sub.add_parser("doctor")
     doctor.add_argument("--host-skill-version")
     doctor.set_defaults(func=cmd_doctor)
@@ -1125,7 +1249,7 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
         func: Callable[[argparse.Namespace], int] = args.func
         return func(args)
-    except (FileNotFoundError, ValueError, KeyError, json.JSONDecodeError) as exc:
+    except (FileNotFoundError, ValueError, KeyError, json.JSONDecodeError, PinError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return EXIT_INVALID_INPUT
 

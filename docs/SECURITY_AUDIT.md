@@ -77,6 +77,23 @@ Adversarial tests cover forged phase/completion state and forged task evidence. 
 not claimed as a passing final scan; the remediated release uses the standard focused source-backed
 review, targeted adversarial tests, CI, and CodeQL gates defined in `RELEASE_CHECKLIST.md`.
 
+## v1.1.4 focused pin/update review
+
+v1.1.4 touches the explicit version-management/update boundary but deliberately does not replace
+the installer. The owner and maintainer chose the lower-cost focused-review path rather than a
+full repository Codex Security scan because the change is a small wrapper around the already
+hardened installer and the model-usage cost of repository-wide scans is material.
+
+The focused review verifies that `pin` accepts only published stable semantic GitHub Releases,
+checks the selected platform bootstrap against that Release's `SHA256SUMS`, strips inherited
+repository/release-base overrides before delegation, preserves installer downgrade approval and
+rollback behavior, performs no arbitrary sibling-launcher execution, and treats stale launchers
+later on PATH as warnings only when the resolved managed launcher and authoritative versions agree.
+Adversarial regression tests cover release resolution, bootstrap checksum mismatch, canonical
+delegation environment, post-install pin verification, aligned/drifted status, and shadowed stale
+launcher behavior. Public CI and CodeQL on the immutable release commit remain mandatory before
+publication.
+
 ## Scope limitation
 
 The application threat model excludes kernel compromise and malware already executing as the

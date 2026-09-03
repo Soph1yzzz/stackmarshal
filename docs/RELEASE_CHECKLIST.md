@@ -17,6 +17,8 @@
 - [x] Git, Python 3.11+, and venv prerequisite detection
 - [x] explicit approval before prerequisite installation, PATH changes, modified Skill replacement, or downgrade
 - [x] latest-stable discovery and explicit semantic-version pinning
+- [x] post-bootstrap `stackmarshal pin latest`, exact pin, pin status, and human `stackmarshal version` drift workflow
+- [x] `pin` verifies the selected Release bootstrap against `SHA256SUMS` before delegating to the atomic installer
 - [x] dedicated managed venv with no global/active-environment installation
 - [x] strict SHA256SUMS verification for shared installer and payloads
 - [x] safe Skill ZIP extraction and CLI/Skill version synchronization
