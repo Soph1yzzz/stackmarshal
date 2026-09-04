@@ -26,11 +26,12 @@ class ActivityBudgetExhausted(ValueError):
 _ALLOWED_PHASES = {
     "implementation": {Phase.IMPLEMENTATION},
     "verification": {Phase.VERIFICATION},
-    "task-attempt": {Phase.IMPLEMENTATION, Phase.VERIFICATION},
+    "correction": {Phase.CORRECTION},
+    "task-attempt": {Phase.IMPLEMENTATION, Phase.CORRECTION, Phase.VERIFICATION},
     "research-round": {Phase.RESEARCH_GATE, Phase.LANDSCAPE_RESEARCH},
     "architecture-replan": {Phase.REPLAN, Phase.ARCHITECTURE_FREEZE},
-    "failure-repeat": {Phase.IMPLEMENTATION, Phase.VERIFICATION, Phase.REPLAN},
-    "stagnation-cycle": {Phase.IMPLEMENTATION, Phase.VERIFICATION, Phase.REPLAN},
+    "failure-repeat": {Phase.IMPLEMENTATION, Phase.CORRECTION, Phase.VERIFICATION, Phase.REPLAN},
+    "stagnation-cycle": {Phase.IMPLEMENTATION, Phase.CORRECTION, Phase.VERIFICATION, Phase.REPLAN},
     "scope-addition": {Phase.IMPLEMENTATION, Phase.REPLAN},
 }
 

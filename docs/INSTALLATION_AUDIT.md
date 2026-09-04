@@ -126,6 +126,16 @@ state, installed Skill, and PATH-resolved launcher. Older launchers later on PAT
 shadowed warnings but do not create a false repair blocker when the resolved managed launcher and
 authoritative components agree.
 
+## v1.1.5 shadowed-launcher repair addendum
+
+v1.1.5 adds `stackmarshal repair` as the operator-facing convergence command. It re-runs the exact
+managed version through the same verified atomic installer rather than creating a second repair
+implementation. `stackmarshal repair --remove-shadowed` may additionally remove PATH launchers only
+when they are outside the managed root and nearby package metadata or launcher evidence identifies
+them as StackMarshal. Unknown or provenance-free executables are skipped and reported, not deleted.
+The removal flag is explicit because deleting a launcher outside the managed install is a global
+filesystem mutation.
+
 ## Residual limitations
 
 - The one-time first bootstrap script is trusted through HTTPS delivery from the GitHub Release.

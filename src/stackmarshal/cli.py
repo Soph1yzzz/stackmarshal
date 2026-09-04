@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import sys
 from typing import Any
 
@@ -21,6 +22,7 @@ from .config import default_config, load_config
 from .constants import Mode, Phase, STATE_DIR, Status, __version__
 from .failure import fingerprint
 from .lock import verify_lock
+from .migration import MigrationError, migrate_legacy_state
 from .models import ProgressSnapshot
 from .pinning import PinError, install_pin
 from .progress import evaluate
@@ -60,6 +62,18 @@ EXIT_UNSAFE = 6
 EXIT_EXTERNAL = 7
 EXIT_CHECKPOINT = 8
 EXIT_COMPLETE = 9
+
+
+def _configure_stdio_utf8() -> None:
+    """Keep CLI evidence UTF-8 even when Windows inherits a legacy console code page."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="strict")
+        except (OSError, ValueError):
+            continue
 
 
 def _json(data: Any) -> None:
@@ -313,6 +327,20 @@ def _completion_gate_errors(root: Path, state: Any, *, require_finalization: boo
     return errors
 
 
+def _stackmarshal_runs_already_ignored(root: Path) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", "--no-index", "--", ".stackmarshal/runs/__stackmarshal_probe__"],
+            cwd=root,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     root = _root(args.root)
     paths = _paths(root)
@@ -324,13 +352,24 @@ def cmd_init(args: argparse.Namespace) -> int:
     gitignore = root / ".gitignore"
     _assert_workspace_entry(root, gitignore, expected="file")
     marker = ".stackmarshal/runs/\n!.stackmarshal/runs/*/checkpoint.md\n!.stackmarshal/runs/*/checkpoint.json\n"
-    if gitignore.exists():
-        current = gitignore.read_text(encoding="utf-8")
-        if ".stackmarshal/runs/" not in current:
-            gitignore.write_text(current.rstrip() + "\n" + marker, encoding="utf-8")
-    else:
-        gitignore.write_text(marker, encoding="utf-8")
-    _json({"initialized": True, "root": str(root), "config": str(paths["config"])})
+    gitignore_mutated = False
+    already_ignored = _stackmarshal_runs_already_ignored(root)
+    if not already_ignored:
+        if gitignore.exists():
+            current = gitignore.read_text(encoding="utf-8")
+            if ".stackmarshal/runs/" not in current:
+                gitignore.write_text(current.rstrip() + "\n" + marker, encoding="utf-8")
+                gitignore_mutated = True
+        else:
+            gitignore.write_text(marker, encoding="utf-8")
+            gitignore_mutated = True
+    _json({
+        "initialized": True,
+        "root": str(root),
+        "config": str(paths["config"]),
+        "gitignore_mutated": gitignore_mutated,
+        "preexisting_ignore": already_ignored,
+    })
     return 0
 
 
@@ -377,6 +416,15 @@ def _find_state(root: Path, run_id: str | None) -> tuple[Path, Any]:
         path = candidates[0]
         _paths(root, path.parent.name)
     return path, load_state(path, project_root=root)
+
+
+def cmd_migrate(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    result = migrate_legacy_state(root, dry_run=args.dry_run)
+    if result.get("migrated"):
+        result["next_action"] = "Start a new signed run; archived legacy evidence was not promoted to authority."
+    _json(result)
+    return 0
 
 
 def cmd_state_show(args: argparse.Namespace) -> int:
@@ -530,8 +578,8 @@ def cmd_task_start(args: argparse.Namespace) -> int:
 def cmd_task_complete(args: argparse.Namespace) -> int:
     root = _root(args.root)
     path, state = _find_state(root, args.run_id)
-    if state.status is not Status.RUNNING or state.phase not in {Phase.IMPLEMENTATION, Phase.VERIFICATION}:
-        raise ValueError("Tasks may be completed only during IMPLEMENTATION or VERIFICATION")
+    if state.status is not Status.RUNNING or state.phase not in {Phase.IMPLEMENTATION, Phase.CORRECTION, Phase.VERIFICATION}:
+        raise ValueError("Tasks may be completed only during IMPLEMENTATION, CORRECTION, or VERIFICATION")
     task = complete_task(root, args.task_id, args.evidence)
     append_event(
         path.with_name("events.jsonl"),
@@ -549,13 +597,31 @@ def cmd_task_block(args: argparse.Namespace) -> int:
     if state.status is not Status.RUNNING:
         raise ValueError(f"Cannot block task for terminal run: {state.status.value}")
     task = block_task(root, args.task_id, args.reason)
+    propagated_stop: dict[str, Any] | None = None
+    if task.get("mandatory", True):
+        reason_upper = args.reason.strip().upper()
+        if reason_upper.startswith("VERIFICATION_EXTERNAL_BLOCKED:"):
+            propagated_stop = {
+                "code": Status.VERIFICATION_EXTERNAL_BLOCKED.value,
+                "reason": args.reason.split(":", 1)[1].strip() or "External verification is blocked",
+                "details": {"task_id": args.task_id, "source": "mandatory_task_block"},
+            }
+        elif reason_upper.startswith("BLOCKED_EXTERNAL:"):
+            propagated_stop = {
+                "code": Status.BLOCKED_EXTERNAL.value,
+                "reason": args.reason.split(":", 1)[1].strip() or "An external dependency blocks progress",
+                "details": {"task_id": args.task_id, "source": "mandatory_task_block"},
+            }
+        if propagated_stop is not None:
+            state.stop_reason = propagated_stop
+            save_state(state, path)
     append_event(
         path.with_name("events.jsonl"),
         "task_blocked",
         state.phase,
-        {"task_id": args.task_id, "reason": args.reason},
+        {"task_id": args.task_id, "reason": args.reason, "propagated_stop_reason": propagated_stop},
     )
-    _json({"blocked": True, "task": task})
+    _json({"blocked": True, "task": task, "run_stop_reason": propagated_stop})
     return 0
 
 
@@ -877,6 +943,73 @@ def cmd_pin(args: argparse.Namespace) -> int:
     return 0
 
 
+def _remove_proven_shadowed_launchers() -> tuple[list[str], list[dict[str, str]]]:
+    managed_root = _default_managed_install_root().resolve(strict=False)
+    resolved = shutil.which("stackmarshal")
+    resolved_key = _normalized_path(Path(resolved)) if resolved else None
+    removed: list[str] = []
+    skipped: list[dict[str, str]] = []
+    allowed_names = {"stackmarshal", "stackmarshal.exe", "stackmarshal.cmd", "stackmarshal.bat", "stackmarshal.com"}
+    for candidate in _path_stackmarshal_candidates():
+        path = Path(str(candidate["path"]))
+        if resolved_key is not None and _normalized_path(path) == resolved_key:
+            continue
+        try:
+            resolved_path = path.resolve(strict=True)
+        except OSError:
+            continue
+        if resolved_path == managed_root or managed_root in resolved_path.parents:
+            continue
+        if path.name.casefold() not in allowed_names:
+            skipped.append({"path": str(path), "reason": "unexpected_launcher_name"})
+            continue
+        metadata_versions = candidate.get("metadata_versions", [])
+        launcher_version = candidate.get("version")
+        proven_stackmarshal = bool(launcher_version) or (isinstance(metadata_versions, list) and bool(metadata_versions))
+        if not proven_stackmarshal:
+            skipped.append({"path": str(path), "reason": "stackmarshal_provenance_unverified"})
+            continue
+        if path.is_symlink() or not path.is_file():
+            skipped.append({"path": str(path), "reason": "launcher_not_regular_file"})
+            continue
+        try:
+            path.unlink()
+        except OSError as exc:
+            skipped.append({"path": str(path), "reason": f"remove_failed:{exc.__class__.__name__}"})
+            continue
+        removed.append(str(path))
+    return removed, skipped
+
+
+def cmd_repair(args: argparse.Namespace) -> int:
+    status = _pin_status_payload()
+    managed = status.get("managed_install")
+    managed_version = managed.get("version") if isinstance(managed, dict) else None
+    if not isinstance(managed_version, str):
+        raise PinError("No managed StackMarshal installation found; run 'stackmarshal pin latest' first")
+    installed = install_pin(
+        managed_version,
+        assume_yes=args.yes,
+        force=args.force,
+        allow_downgrade=False,
+        no_path=False,
+    )
+    removed: list[str] = []
+    skipped: list[dict[str, str]] = []
+    if args.remove_shadowed:
+        removed, skipped = _remove_proven_shadowed_launchers()
+    doctor = _doctor_payload(None)
+    _json({
+        "repaired": True,
+        "version": installed,
+        "removed_shadowed_launchers": removed,
+        "skipped_shadowed_launchers": skipped,
+        "restart_codex": True,
+        "warnings": doctor["warnings"],
+    })
+    return 0
+
+
 def cmd_version(args: argparse.Namespace) -> int:
     payload = _pin_status_payload()
     status = payload["status"]
@@ -931,21 +1064,117 @@ def cmd_checkpoint_create(args: argparse.Namespace) -> int:
     root = _root(args.root)
     path, state = _find_state(root, args.run_id)
     if state.status is Status.RUNNING:
-        state.status = Status.CHECKPOINT_READY
+        previous_phase = state.phase
+        state.progress["resume_phase"] = previous_phase.value
+        propagated_code = state.stop_reason.get("code") if isinstance(state.stop_reason, dict) else None
+        try:
+            propagated_status = Status(str(propagated_code)) if propagated_code else None
+        except ValueError:
+            propagated_status = None
+        if propagated_status in {
+            Status.BLOCKED_EXTERNAL,
+            Status.VERIFICATION_EXTERNAL_BLOCKED,
+            Status.APPROVAL_REQUIRED,
+        }:
+            state.status = propagated_status
+        else:
+            state.status = Status.CHECKPOINT_READY
         state.phase = Phase.CHECKPOINTING
         save_state(state, path)
     json_path, markdown_path = create_checkpoint(
         state, path.parent, next_action=args.next_action, do_not_repeat=args.do_not_repeat
     )
-    append_event(path.with_name("events.jsonl"), "checkpoint_created", state.phase, {"path": str(json_path)})
-    _json({"checkpoint": str(json_path), "markdown": str(markdown_path)})
-    return EXIT_CHECKPOINT
+    append_event(
+        path.with_name("events.jsonl"),
+        "checkpoint_created",
+        state.phase,
+        {"path": str(json_path), "status": state.status.value, "stop_reason": state.stop_reason},
+    )
+    _json({
+        "checkpoint": str(json_path),
+        "markdown": str(markdown_path),
+        "status": state.status.value,
+        "succeeded": True,
+        "message": f"{state.status.value} is an expected terminal stop; checkpoint creation succeeded.",
+    })
+    return 0
 
 
-def cmd_resume_inspect(args: argparse.Namespace) -> int:
+def _resume_phase_from_checkpoint(checkpoint: dict[str, Any], state: Any) -> Phase:
+    candidates = [checkpoint.get("resume_phase"), state.progress.get("resume_phase")]
+    snapshots = state.progress.get("phase_snapshots", {})
+    if isinstance(snapshots, dict):
+        if Phase.VERIFICATION.value in snapshots:
+            candidates.append(Phase.VERIFICATION.value)
+        elif Phase.IMPLEMENTATION.value in snapshots:
+            candidates.append(Phase.IMPLEMENTATION.value)
+    for value in candidates:
+        try:
+            phase = Phase(str(value))
+        except (TypeError, ValueError):
+            continue
+        if phase not in {Phase.CHECKPOINTING, Phase.COMPLETE, Phase.STOPPED}:
+            return phase
+    raise ValueError("Checkpoint has no safe resumable phase; use a newer checkpoint or start a new run")
+
+
+def cmd_resume(args: argparse.Namespace) -> int:
     root = _root(args.root)
-    checkpoint = Path(args.file) if args.file else _find_state(root, args.run_id)[0].with_name("checkpoint.json")
-    _json(inspect_checkpoint(checkpoint, root))
+    if args.target == "inspect":
+        checkpoint_path = Path(args.file) if args.file else _find_state(root, args.run_id)[0].with_name("checkpoint.json")
+        _json(inspect_checkpoint(checkpoint_path, root))
+        return 0
+
+    run_id = validate_run_id(args.target)
+    path, state = _find_state(root, run_id)
+    if state.status is Status.RUNNING:
+        raise ValueError(f"Run is already active: {run_id}")
+    resumable = {
+        Status.CHECKPOINT_READY,
+        Status.BLOCKED_EXTERNAL,
+        Status.VERIFICATION_EXTERNAL_BLOCKED,
+        Status.APPROVAL_REQUIRED,
+    }
+    if state.status not in resumable:
+        raise ValueError(f"Run status is not resumable: {state.status.value}")
+    active = [(candidate, live) for candidate, live in _active_runs(root) if live.run_id != run_id]
+    if active:
+        raise ValueError(f"Another authoritative run is already active: {active[-1][1].run_id}")
+    checkpoint_path = Path(args.file) if args.file else path.with_name("checkpoint.json")
+    checkpoint = inspect_checkpoint(checkpoint_path, root)
+    if checkpoint.get("run_id") != run_id:
+        raise ValueError("Checkpoint run id does not match requested run")
+    resume_phase = _resume_phase_from_checkpoint(checkpoint, state)
+    previous_stop = state.stop_reason
+    history = state.progress.setdefault("resolved_stops", [])
+    if not isinstance(history, list):
+        raise ValueError("Invalid resolved_stops progress state")
+    history.append({
+        "timestamp": now_iso(),
+        "status": state.status.value,
+        "stop_reason": previous_stop,
+        "resume_phase": resume_phase.value,
+        "resolution": args.reason or "operator_requested_resume",
+    })
+    state.status = Status.RUNNING
+    state.phase = resume_phase
+    state.stop_reason = None
+    state.progress["resume_phase"] = resume_phase.value
+    state.updated_at = now_iso()
+    save_state(state, path)
+    append_event(
+        path.with_name("events.jsonl"),
+        "run_resumed",
+        state.phase,
+        {"resume_phase": resume_phase.value, "resolution": args.reason or "operator_requested_resume"},
+    )
+    _json({
+        "resumed": True,
+        "run_id": run_id,
+        "status": state.status.value,
+        "phase": state.phase.value,
+        "checkpoint": str(checkpoint_path),
+    })
     return 0
 
 
@@ -1028,6 +1257,7 @@ def cmd_stop(args: argparse.Namespace) -> int:
         Status.APPROVAL_REQUIRED: EXIT_APPROVAL,
         Status.UNSAFE_DEPENDENCY: EXIT_UNSAFE,
         Status.BLOCKED_EXTERNAL: EXIT_EXTERNAL,
+        Status.VERIFICATION_EXTERNAL_BLOCKED: EXIT_EXTERNAL,
     }
     return exit_codes.get(status, EXIT_CHECKPOINT)
 
@@ -1081,6 +1311,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init").set_defaults(func=cmd_init)
+    migrate = sub.add_parser("migrate")
+    migrate.add_argument("--dry-run", action="store_true")
+    migrate.set_defaults(func=cmd_migrate)
     start = sub.add_parser("start")
     start.add_argument("--mode", choices=[item.value for item in Mode])
     start.add_argument("--budget", choices=["quick", "standard", "deep"])
@@ -1187,11 +1420,11 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint_create.set_defaults(func=cmd_checkpoint_create)
 
     resume = sub.add_parser("resume")
-    resume_sub = resume.add_subparsers(dest="resume_command", required=True)
-    resume_inspect = resume_sub.add_parser("inspect")
-    resume_inspect.add_argument("--run-id")
-    resume_inspect.add_argument("--file")
-    resume_inspect.set_defaults(func=cmd_resume_inspect)
+    resume.add_argument("target", nargs="?", default="inspect", help="inspect or a run id to resume")
+    resume.add_argument("--run-id", help="run id used by compatibility 'resume inspect'")
+    resume.add_argument("--file", help="explicit checkpoint.json path")
+    resume.add_argument("--reason", help="operator-visible blocker resolution note")
+    resume.set_defaults(func=cmd_resume)
 
     validate = sub.add_parser("validate")
     validate.add_argument("file")
@@ -1234,6 +1467,16 @@ def build_parser() -> argparse.ArgumentParser:
     pin.add_argument("--no-path", action="store_true")
     pin.set_defaults(func=cmd_pin)
 
+    repair = sub.add_parser("repair")
+    repair.add_argument("--yes", action="store_true", help="accept installer dependency/PATH prompts")
+    repair.add_argument("--force", action="store_true", help="back up and replace a modified/unmanaged Skill")
+    repair.add_argument(
+        "--remove-shadowed",
+        action="store_true",
+        help="remove only non-managed PATH launchers with high-confidence StackMarshal package evidence",
+    )
+    repair.set_defaults(func=cmd_repair)
+
     version = sub.add_parser("version")
     version.set_defaults(func=cmd_version)
 
@@ -1244,12 +1487,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _configure_stdio_utf8()
     parser = build_parser()
     try:
         args = parser.parse_args(argv)
         func: Callable[[argparse.Namespace], int] = args.func
         return func(args)
-    except (FileNotFoundError, ValueError, KeyError, json.JSONDecodeError, PinError) as exc:
+    except (FileNotFoundError, ValueError, KeyError, json.JSONDecodeError, PinError, MigrationError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return EXIT_INVALID_INPUT
 

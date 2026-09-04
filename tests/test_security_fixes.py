@@ -300,7 +300,7 @@ def test_unsigned_repository_live_state_is_rejected(tmp_path: Path) -> None:
     state_path.parent.mkdir(parents=True)
     state_path.write_text(json.dumps(state.to_dict()), encoding="utf-8")
     assert validate_json_file(state_path, "run-state")["valid"] is False
-    with pytest.raises(ValueError, match="integrity algorithm"):
+    with pytest.raises(ValueError, match=r"Legacy unsigned StackMarshal run state.*stackmarshal migrate"):
         load_state(state_path, project_root=root)
 
 
@@ -319,7 +319,7 @@ def test_task_graph_tampering_and_unsigned_graph_are_rejected(tmp_path: Path) ->
 
     graph_path.write_text(json.dumps({"schema_version": "1.0", "tasks": []}), encoding="utf-8")
     assert validate_json_file(graph_path, "task-graph")["valid"] is False
-    with pytest.raises(ValueError, match="integrity algorithm"):
+    with pytest.raises(ValueError, match=r"Legacy unsigned StackMarshal task graph.*stackmarshal migrate"):
         load_task_graph(root, required=True)
 
 

@@ -167,7 +167,9 @@ def test_acquisition_receipt_and_rollback(tmp_path: Path) -> None:
 def test_checkpoint_integrity_and_project_identity(tmp_path: Path) -> None:
     state = create_run(tmp_path, "Use StackMarshal", Mode.BUILD, default_config())
     state.status = Status.BUDGET_EXHAUSTED
-    json_path, markdown = create_checkpoint(state, tmp_path / "run", next_action="Fix blocker")
+    json_path, markdown = create_checkpoint(
+        state, tmp_path / ".stackmarshal" / "runs" / state.run_id, next_action="Fix blocker"
+    )
     assert markdown.exists()
     inspected = inspect_checkpoint(json_path, tmp_path)
     assert inspected["next_action"] == "Fix blocker"

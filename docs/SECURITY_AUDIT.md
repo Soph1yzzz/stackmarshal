@@ -94,6 +94,43 @@ delegation environment, post-install pin verification, aligned/drifted status, a
 launcher behavior. Public CI and CodeQL on the immutable release commit remain mandatory before
 publication.
 
+## v1.1.5 focused recovery/migration review
+
+v1.1.5 changes four material trust boundaries exposed by field dogfooding: terminal-to-running
+same-run resume, handling of pre-HMAC legacy state, non-Git checkpoint identity, and optional
+removal of shadowed launchers outside the managed install. Those boundaries qualify for explicit
+full-scan consideration under the release policy. Under the owner's standing cost-sensitive,
+risk-triggered scan policy, this release uses a focused source-backed review plus adversarial
+regressions, public CI, and CodeQL rather than another full repository Codex Security scan. No full
+scan PASS is claimed.
+
+The source-backed review confirms:
+
+- Resume reopens only `CHECKPOINT_READY`, `BLOCKED_EXTERNAL`,
+  `VERIFICATION_EXTERNAL_BLOCKED`, or `APPROVAL_REQUIRED`; it requires a valid HMAC-authenticated
+  checkpoint, matching run id, repository/project identity, Git HEAD/dirty state, exact Git or
+  non-Git worktree fingerprint, a safe recorded resume phase, and no competing RUNNING run.
+- Legacy state is classified as migratable only when the integrity envelope is wholly absent.
+  Partial/unknown integrity fields fail closed. Migration preserves the old bytes under the ignored
+  runtime boundary, records SHA-256/size evidence, and never signs the archived record into current
+  execution authority.
+- `VERIFICATION -> CORRECTION -> VERIFICATION` does not relax mandatory task evidence,
+  verification freshness, finalization, or COMPLETE gates; it only separates bounded correction
+  from architecture-replan accounting.
+- `repair --remove-shadowed` is an explicit global-write action. It never removes the active or
+  managed launcher and only deletes a non-managed regular launcher when bounded package/launcher
+  evidence identifies it as StackMarshal. Unknown/provenance-free executables are retained and
+  reported.
+- Successful explicit checkpoint creation now returns success while the checkpoint JSON still
+  carries the formal terminal status; formal `stop` operations preserve their differentiated
+  non-zero stop codes.
+
+`tests/test_dogfood_recovery.py` covers same-run resume, workspace mutation rejection, legacy
+archival and partial-integrity refusal, bounded correction, mandatory external-block propagation,
+external-verification status, existing-ignore behavior, Windows UTF-8 evidence, and conservative
+shadowed-launcher cleanup. A known unresolved material security finding would still block release;
+the focused review found none at this stage.
+
 ## Scope limitation
 
 The application threat model excludes kernel compromise and malware already executing as the

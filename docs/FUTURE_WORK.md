@@ -1,12 +1,12 @@
 # Future Work
 
-Items intentionally outside the v1.1.4 version-management scope:
+Items intentionally outside the v1.1.5 dogfood recovery-hardening scope:
 
 - Claude Code, Gemini CLI, Cline, GitHub Copilot, and OpenHands adapters.
 - Multi-agent research/build/review orchestration.
 - Optional registry-native discovery adapters beyond the host-provided tools.
 - Signed provenance attestations and package-registry publication automation.
-- Checkpoint migrations when a v1.x schema change is first introduced.
+- Schema-version migrations beyond the v1.1.5 legacy unsigned-state archival boundary.
 - A hosted dashboard or marketplace.
 
 v1.1.3 closes the three runtime-trust defects discovered during the MandateMarshal v0.2 field dogfood:
@@ -23,8 +23,14 @@ The next intended sequencing is:
   - `stackmarshal pin latest`, exact-version pinning, and pin status,
   - human `stackmarshal version` drift view while preserving script-friendly `--version`,
   - reuse of the verified atomic installer rather than a second update implementation.
-- **v1.1.5 — Operator UX / non-invasive operation**
-  - local/non-invasive initialization that does not dirty the target repository,
+- **v1.1.5 — Dogfood recovery hardening**
+  - same-run resume from integrity-validated `CHECKPOINT_READY` / resumable external or approval stops,
+  - legacy unsigned run/task state archival without promoting untrusted evidence to signed authority,
+  - bounded `VERIFICATION -> CORRECTION -> VERIFICATION` without spending architecture-replan budget,
+  - run-level external-block propagation, first-class external-verification blocking, UTF-8 CLI evidence, successful checkpoint exit semantics,
+  - avoid `.gitignore` mutation when Git already ignores StackMarshal state, plus explicit high-confidence shadowed-launcher repair.
+- **v1.1.6 — Operator UX / fully non-invasive operation**
+  - repository-external/local initialization mode beyond the v1.1.5 existing-ignore optimization,
   - separate environment inventory from delivery-quality audit,
   - compact human CLI output with explicit full JSON mode.
 - **v1.2.0 — Adapter framework + Claude Code adapter**

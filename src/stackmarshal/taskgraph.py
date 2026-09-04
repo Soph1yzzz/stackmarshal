@@ -31,6 +31,8 @@ def load_task_graph(root: Path, *, required: bool = False) -> dict[str, Any]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("Task graph must be a JSON object")
+    if all(raw.get(field) is None for field in ("integrity_algorithm", "integrity_key_id", "integrity_hmac_sha256")):
+        raise ValueError("Legacy unsigned StackMarshal task graph detected; run 'stackmarshal migrate' to archive it safely")
     ensure_signing_key_outside(root)
     verify_record(raw)
     if raw.get("schema_version") != "1.0":

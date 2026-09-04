@@ -51,6 +51,7 @@ def create_checkpoint(
             "mode": state.mode.value,
             "status": state.status.value,
             "current_phase": state.phase.value,
+            "resume_phase": state.progress.get("resume_phase"),
             "budget_used": state.budget.used,
             "budget_remaining": state.budget.remaining(),
             "completed": completed_items,
@@ -59,7 +60,7 @@ def create_checkpoint(
             "files_changed": files_changed or [],
             "tests_run": tests_run or [],
             "stop_reason": state.stop_reason,
-            "resume_command": "stackmarshal resume inspect",
+            "resume_command": f"stackmarshal resume {state.run_id}",
         }
     )
     json_path = output_dir / "checkpoint.json"
@@ -96,7 +97,7 @@ def create_checkpoint(
 ## Resume
 
 ```text
-stackmarshal resume inspect
+stackmarshal resume {state.run_id}
 ```
 """
     markdown_path.write_text(markdown, encoding="utf-8")

@@ -2,12 +2,14 @@
 
 Use the deterministic state order defined by StackMarshal Core:
 
-`INVOCATION_CHECK -> INTENT_NORMALIZATION -> ENVIRONMENT_AUDIT -> RESEARCH_GATE -> LANDSCAPE_RESEARCH? -> CAPABILITY_MAPPING -> CAPABILITY_DISCOVERY -> TRUST_EVALUATION -> ISOLATED_POC? -> ARCHITECTURE_FREEZE -> TASK_GRAPH -> IMPLEMENTATION? -> VERIFICATION? -> COMPLETE|CHECKPOINTING`.
+`INVOCATION_CHECK -> INTENT_NORMALIZATION -> ENVIRONMENT_AUDIT -> RESEARCH_GATE -> LANDSCAPE_RESEARCH? -> CAPABILITY_MAPPING -> CAPABILITY_DISCOVERY -> TRUST_EVALUATION -> ISOLATED_POC? -> ARCHITECTURE_FREEZE -> TASK_GRAPH -> IMPLEMENTATION? -> VERIFICATION? -> (CORRECTION -> VERIFICATION)* -> COMPLETE|CHECKPOINTING`.
 
 Research mode exits after architecture freeze. Prepare mode exits after task graph.
-Build mode continues through implementation and verification. Resume starts from a
-validated checkpoint. Every transition is appended to `events.jsonl`; history is
-never rewritten. Architecture changes after freeze require a decision record.
+Build mode continues through implementation and verification. Verification-discovered fixes that
+do not alter architecture/task planning use the bounded CORRECTION lane rather than REPLAN. Resume
+reopens the same run only from an integrity-validated checkpoint and a resumable terminal status.
+Every transition/resume is appended to `events.jsonl`; history is never rewritten. Architecture
+changes after freeze require a decision record.
 
 One authoritative run owns a bounded job. `start` rejects a second RUNNING run in the
 same workspace. A nested workspace does not inherit an ancestor repository as its

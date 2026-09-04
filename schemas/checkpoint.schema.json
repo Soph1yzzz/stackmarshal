@@ -29,6 +29,7 @@
     "mode": {"enum": ["research", "prepare", "build", "resume"]},
     "status": {"type": "string"},
     "current_phase": {"type": "string"},
+    "resume_phase": {"type": ["string", "null"]},
     "budget_used": {"type": "object"},
     "budget_remaining": {"type": "object"},
     "completed": {"type": "array", "items": {"type": "string"}},

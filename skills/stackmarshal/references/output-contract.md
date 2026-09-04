@@ -8,5 +8,7 @@ substitute confidence or narrative for evidence.
 
 Every non-complete terminal result states the formal status, precise stop reason,
 checkpoint paths, remaining mandatory blocker, one next action, do-not-repeat list,
-and resume command. Do not say that StackMarshal guarantees every project will be
-finished; it guarantees finite execution and a resumable formal state.
+and resume command. Successful explicit `checkpoint create` exits successfully and says the
+checkpoint was created; the formal terminal status is data, not a false indication that checkpoint
+creation failed. Do not say that StackMarshal guarantees every project will be finished; it
+guarantees finite execution and a resumable formal state when the stop class is explicitly resumable.

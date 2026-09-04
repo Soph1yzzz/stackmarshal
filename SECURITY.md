@@ -38,11 +38,15 @@ complete without evidence.
 
 StackMarshal is not a sandbox. The user-local integrity signing key protects live run state,
 canonical task state, checkpoints, and acquisition receipts against repository-local tampering;
-it does not protect against malware already executing as the same OS user. The host Codex
+legacy unsigned state is never promoted into that authority and is instead hash-manifested and archived by
+`stackmarshal migrate`. Same-run resume re-verifies checkpoint integrity, project/Git/worktree identity,
+and the recorded resume phase before reopening a resumable stop. It does not protect against malware already executing as the same OS user. The host Codex
 environment and operator remain responsible for OS-level isolation, credentials, network
 controls, and reviewing publication or privileged actions. Explicit `stackmarshal pin` version
 management accepts only published stable GitHub Releases, verifies the selected bootstrap against
-that Release's `SHA256SUMS`, and delegates all mutation to the existing atomic installer.
+that Release's `SHA256SUMS`, and delegates all mutation to the existing atomic installer. Explicit
+`stackmarshal repair --remove-shadowed` removes only non-managed launcher files with high-confidence
+StackMarshal package/version evidence; unverified executables are left untouched.
 
 ## Release security assurance
 

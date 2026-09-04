@@ -8,7 +8,6 @@ import pytest
 
 from stackmarshal.cli import (
     EXIT_BUDGET,
-    EXIT_CHECKPOINT,
     EXIT_COMPLETE,
     EXIT_INVALID_INPUT,
     EXIT_INVALID_STATE,
@@ -288,7 +287,7 @@ def test_cli_lock_checkpoint_resume_stop_and_errors(
             "bad approach",
         ],
     )
-    assert code == EXIT_CHECKPOINT and Path(str(checkpoint["checkpoint"])).exists()
+    assert code == 0 and checkpoint["succeeded"] is True and Path(str(checkpoint["checkpoint"])).exists()
     code, inspected = _call(
         capsys,
         ["--root", str(root), "resume", "inspect", "--file", str(checkpoint["checkpoint"])],

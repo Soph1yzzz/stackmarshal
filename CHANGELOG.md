@@ -2,6 +2,28 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
+## [1.1.5] - 2026-09-04
+
+### Added
+
+- Add real same-run resume with `stackmarshal resume <run-id>` for integrity-validated `CHECKPOINT_READY`, external-blocked, verification-external-blocked, and approval-wait checkpoints.
+- Add `stackmarshal migrate` to preserve legacy unsigned run/task evidence in a read-only hash-manifested archive without promoting it to signed execution authority.
+- Add bounded `VERIFICATION -> CORRECTION -> VERIFICATION` for small verification fixes without consuming architecture-replan budget.
+- Add first-class `VERIFICATION_EXTERNAL_BLOCKED` stop semantics for network/service-dependent verification gates.
+- Add `stackmarshal repair --remove-shadowed` for explicitly removing only high-confidence stale StackMarshal PATH launchers after managed repair.
+
+### Fixed
+
+- Propagate mandatory `BLOCKED_EXTERNAL:` / `VERIFICATION_EXTERNAL_BLOCKED:` task blockers into run-level stop reasons and signed checkpoints.
+- Return success for successful explicit checkpoint creation and state clearly that the terminal checkpoint was created successfully.
+- Force UTF-8 CLI stdout/stderr evidence so Japanese invocation text survives Windows legacy console encodings.
+- Avoid project `.gitignore` mutation when Git already ignores StackMarshal state through `.git/info/exclude`, global excludes, or an existing ignore rule.
+- Bind non-Git checkpoints to a real workspace fingerprint instead of `None`, so post-checkpoint changes invalidate resume.
+
+### Changed
+
+- Move the remaining fully non-invasive init, delivery-audit, and compact-output roadmap work from v1.1.5 to v1.1.6 after dogfood exposed higher-priority recovery correctness issues.
+
 ## [1.1.4] - 2026-09-03
 
 ### Added

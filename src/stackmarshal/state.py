@@ -39,7 +39,8 @@ _ALLOWED_TRANSITIONS: dict[Phase, set[Phase]] = {
     Phase.ARCHITECTURE_FREEZE: {Phase.TASK_GRAPH, Phase.LANDSCAPE_RESEARCH, Phase.STOPPED},
     Phase.TASK_GRAPH: {Phase.IMPLEMENTATION, Phase.COMPLETE, Phase.STOPPED},
     Phase.IMPLEMENTATION: {Phase.VERIFICATION, Phase.REPLAN, Phase.STOPPED},
-    Phase.VERIFICATION: {Phase.COMPLETE, Phase.REPLAN, Phase.CHECKPOINTING},
+    Phase.VERIFICATION: {Phase.COMPLETE, Phase.CORRECTION, Phase.REPLAN, Phase.CHECKPOINTING},
+    Phase.CORRECTION: {Phase.VERIFICATION, Phase.CHECKPOINTING},
     Phase.REPLAN: {Phase.IMPLEMENTATION, Phase.LANDSCAPE_RESEARCH, Phase.CHECKPOINTING},
     Phase.CHECKPOINTING: {Phase.STOPPED},
     Phase.COMPLETE: set(),
@@ -211,7 +212,7 @@ def worktree_fingerprint(root: Path) -> str | None:
     resolved = root.resolve()
     top_level = _run_git(resolved, "rev-parse", "--show-toplevel")
     if not top_level or Path(top_level).resolve() != resolved:
-        return None
+        return workspace_fingerprint(resolved)
     if _run_git(resolved, "rev-parse", "HEAD") is None:
         return workspace_fingerprint(resolved)
     digest = hashlib.sha256()
@@ -371,6 +372,8 @@ def transition(state: RunState, target: Phase) -> RunState:
 def stop(state: RunState, status: Status, reason: str, details: dict[str, Any] | None = None) -> RunState:
     if status in {Status.RUNNING, Status.COMPLETE}:
         raise ValueError("stop() requires a non-complete terminal status")
+    previous_phase = state.phase
+    state.progress["resume_phase"] = previous_phase.value
     state.status = status
     state.phase = Phase.CHECKPOINTING
     state.stop_reason = {"code": status.value, "reason": reason, "details": details or {}}
@@ -394,6 +397,8 @@ def load_state(path: Path, *, project_root: Path | None = None) -> RunState:
         raise ValueError("Run state must be a JSON object")
     if raw.get("schema_version") != SCHEMA_VERSION:
         raise ValueError(f"Unsupported schema_version: {raw.get('schema_version')}")
+    if all(raw.get(field) is None for field in ("integrity_algorithm", "integrity_key_id", "integrity_hmac_sha256")):
+        raise ValueError("Legacy unsigned StackMarshal run state detected; run 'stackmarshal migrate' to archive it safely")
     validate_run_id(str(raw.get("run_id", "")))
     if project_root is not None:
         ensure_signing_key_outside(project_root)

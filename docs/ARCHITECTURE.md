@@ -16,8 +16,15 @@ Project decisions live in `.stackmarshal/project/`; ephemeral runs live in
 `.stackmarshal/runs/<run-id>/`. The shared integrity signing key lives in the user's external
 StackMarshal state directory, never in the repository. Canonical `run.json` and `task-graph.json`
 are authenticated before they are accepted as execution/completion authority. Events are
-append-only JSONL. Architecture is frozen before task execution, and a post-freeze change requires
-a decision record.
+append-only JSONL. Architecture is frozen before task execution, and a post-freeze architecture or
+task-plan change requires a decision record. Verification-only fixes use a separate bounded
+`VERIFICATION -> CORRECTION -> VERIFICATION` lane so they do not consume architecture replan budget.
+
+A formal checkpoint records a signed resume phase. Explicitly resumable terminal states can return
+the same run id to `RUNNING` only after checkpoint HMAC, project identity, Git/dirty state, and exact
+Git or non-Git worktree fingerprint validation. Legacy unsigned run/task records are never converted
+into trusted live authority; migration archives their original bytes with SHA-256 evidence and starts
+fresh signed authority instead.
 
 Build-mode terminal success uses a two-step integrity boundary. `stackmarshal finalize` runs while
 VERIFICATION is still active, regenerates StackMarshal-owned project bookkeeping, and seals the

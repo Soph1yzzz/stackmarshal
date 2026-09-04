@@ -123,7 +123,8 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 
 The installer uses a dedicated virtual environment, installs the matching Codex Skill, verifies
 versioned Release assets, and runs a post-install doctor check. After that first bootstrap, v1.1.4
-makes `stackmarshal pin latest` the normal update command and `stackmarshal version` the quick
+made `stackmarshal pin latest` the normal update command; v1.1.5 adds real same-run checkpoint resume,
+legacy-state archival, and bounded verification correction. `stackmarshal version` remains the quick
 runtime/pin/Skill/launcher drift check. The detailed installation, security, CLI, state, release,
 and development contracts remain below.
 
@@ -157,7 +158,9 @@ StackMarshal makes those failure modes explicit and bounded.
 - **Live activity budgets.** Observable Codex work consumes Core-owned counters instead of leaving a decorative zero-use ledger.
 - **Canonical task graph.** HMAC-authenticated machine-readable task status and evidence are synchronized into a generated Markdown view and gate `COMPLETE`.
 - **Finite stop harness.** Budgets, repeated-failure fingerprints, stagnation detection, scope-drift limits, and formal terminal states.
-- **Checkpoint/resume.** The same user-local HMAC integrity boundary protects checkpoints and acquisition receipts; completed work is not recomputed without a material input change.
+- **Checkpoint/resume.** The same user-local HMAC integrity boundary protects checkpoints and acquisition receipts; `stackmarshal resume <run-id>` reopens only explicitly resumable stops after validating project identity, Git state, exact worktree fingerprint, and the signed resume phase.
+- **Bounded correction.** Small verification fixes use `VERIFICATION -> CORRECTION -> VERIFICATION` without spending the architecture-replan budget.
+- **Legacy evidence without trust promotion.** `stackmarshal migrate` archives old unsigned state with hashes instead of silently signing it into current authority.
 - **Agent-neutral Core.** v1 ships a Codex adapter; future adapters can reuse the state and policy model.
 
 ## Invocation
@@ -209,7 +212,7 @@ stackmarshal version
 Pin an exact release when reproducibility matters:
 
 ```bash
-stackmarshal pin 1.1.4
+stackmarshal pin 1.1.5
 ```
 
 `stackmarshal version` is the human check: it reports the running CLI, exact managed pin,
@@ -233,7 +236,7 @@ after restart before work can begin.
 For a Skill-only manual installation, use the matching release tag:
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.4/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.5/skills/stackmarshal
 ```
 
 ## Quick CLI tour
@@ -242,11 +245,13 @@ $skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.4/s
 stackmarshal --version
 stackmarshal version
 stackmarshal pin status
+stackmarshal repair --remove-shadowed
 stackmarshal init
+stackmarshal migrate --dry-run
 stackmarshal invocation "Use StackMarshal to build this"
 stackmarshal start --mode build --budget standard \
   --invocation "Use StackMarshal to build this"
-stackmarshal doctor --host-skill-version 1.1.4
+stackmarshal doctor --host-skill-version 1.1.5
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -254,6 +259,9 @@ stackmarshal activity record tool-call --amount 2 --detail "bounded host-tool ba
 stackmarshal task add implement --summary "Implement the feature" --acceptance "tests pass"
 stackmarshal task start implement
 stackmarshal task complete implement --evidence "tests/test_feature.py passed"
+stackmarshal state transition CORRECTION
+stackmarshal activity record correction --detail "bounded verification fix"
+stackmarshal state transition VERIFICATION
 stackmarshal finalize
 stackmarshal state transition COMPLETE
 stackmarshal candidate score candidate.json
@@ -261,13 +269,14 @@ stackmarshal failure fingerprint failure.json
 stackmarshal progress evaluate current.json --previous previous.json
 stackmarshal lock verify .stackmarshal/project/locks/dependencies.lock.json
 stackmarshal checkpoint create --next-action "Resolve the external blocker"
-stackmarshal resume inspect
+stackmarshal resume <run-id> --reason "blocker resolved"
+stackmarshal resume inspect --run-id <run-id>
 stackmarshal validate .stackmarshal/runs/<run-id>/run.json --kind run-state
 ```
 
-Machine-readable output is JSON. Exit codes distinguish invalid input/state, budget
-exhaustion, approval, unsafe dependencies, external blockers, checkpoints, and
-completion.
+Machine-readable output is JSON. Successful explicit checkpoint creation exits 0 and reports the
+terminal checkpoint status; formal stop commands still use distinct non-zero codes for budget,
+approval, unsafe dependency, and external-block conditions.
 
 ## Workflow
 
@@ -282,12 +291,15 @@ flowchart TD
   F --> G[Task graph]
   G --> B[Bounded implementation]
   B --> V[Verification]
+  V -->|bounded fix| Q[Correction]
+  Q --> V
   V -->|all mandatory evidence| X[COMPLETE]
-  V -->|formal stop| H[Checkpoint and resume]
+  V -->|formal stop| H[Checkpoint]
+  H -->|validated resume| V
 ```
 
 Formal stop states include `BUDGET_EXHAUSTED`, `STAGNATED`, `REPEATED_FAILURE`,
-`APPROVAL_REQUIRED`, `BLOCKED_EXTERNAL`, `UNSAFE_DEPENDENCY`, `SCOPE_DRIFT`,
+`APPROVAL_REQUIRED`, `BLOCKED_EXTERNAL`, `VERIFICATION_EXTERNAL_BLOCKED`, `UNSAFE_DEPENDENCY`, `SCOPE_DRIFT`,
 `INVALID_STATE`, and `USER_CANCELLED`.
 
 ## Case studies
@@ -375,7 +387,7 @@ behavior is a v1 release requirement.
 `python scripts/build_release.py` resolves the current version from `pyproject.toml` and produces:
 
 - `install.ps1`, `install.sh`, and the shared verified `installer.py`
-- `stackmarshal-skill-v1.1.4.zip`
+- `stackmarshal-skill-v1.1.5.zip`
 - Python wheel and source distribution
 - source archive
 - `SHA256SUMS`

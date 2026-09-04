@@ -117,8 +117,9 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 
 installerは専用virtual environmentへCLIを隔離導入し、対応するCodex Skillを配置し、versioned
 Release assetsを検証してpost-install doctorまで実行します。初回bootstrap後はv1.1.4から
-`stackmarshal pin latest`を通常updateに使い、`stackmarshal version`でruntime / pin / Skill /
-launcherのdriftをすぐ確認できます。詳細な導入、Security、CLI、state、release、development
+`stackmarshal pin latest`を通常updateに使えます。v1.1.5では同一runの実resume、legacy state archival、
+bounded verification correctionを追加しました。`stackmarshal version`でruntime / pin / Skill /
+launcherのdriftもすぐ確認できます。詳細な導入、Security、CLI、state、release、development
 contractは以下の既存説明を維持しています。
 
 ## 詳細概要
@@ -149,7 +150,9 @@ Coding Agentは、調査前に実装を始める、既存OSSを再実装する�
 - **Live activity budget**：観測可能なCodex作業をCore側のcounterへ接続し、実作業したのに`used=0`の帳簿を残しません。
 - **Canonical Task Graph**：HMAC認証されたmachine-readableなtask状態と証拠を正本にし、Markdown viewへ同期して`COMPLETE`をgateします。
 - **有限停止ハーネス**：予算、同一failure fingerprint、停滞、scope driftを検出します。
-- **Checkpoint / Resume**：同じユーザー領域HMACのintegrity境界でcheckpointとacquisition receiptも保護し、入力が変わらない限り完了済み範囲を再計算しません。
+- **Checkpoint / Resume**：同じユーザー領域HMACのintegrity境界でcheckpointとacquisition receiptも保護し、`stackmarshal resume <run-id>`はproject identity、Git state、exact worktree fingerprint、signed resume phaseを検証したresumable stopだけを同一run IDで再開します。
+- **Bounded Correction**：軽微なverification修正は`VERIFICATION -> CORRECTION -> VERIFICATION`で処理し、architecture replan budgetを消費しません。
+- **Legacy evidenceを権威へ昇格しない**：`stackmarshal migrate`は旧unsigned stateをhash付きarchiveへ退避し、勝手に署名してcurrent authorityへ昇格しません。
 - **Agent非依存Core**：v1はCodex Adapter、将来は他Agent Adapterへ拡張可能です。
 
 ## 起動方法
@@ -201,7 +204,7 @@ stackmarshal version
 再現性のためexact releaseへ固定する場合：
 
 ```bash
-stackmarshal pin 1.1.4
+stackmarshal pin 1.1.5
 ```
 
 `stackmarshal version`は人間向け確認で、実行中CLI、managed pin、installed Skill、resolved launcher、
@@ -222,7 +225,7 @@ restart-pending markerを残します。再起動前の古いSkillはStackMarsha
 Skillだけを手動導入する場合も、`main`ではなく対応するRelease tagへ固定します。
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.4/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.5/skills/stackmarshal
 ```
 
 ## CLI例
@@ -231,11 +234,13 @@ $skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.4/s
 stackmarshal --version
 stackmarshal version
 stackmarshal pin status
+stackmarshal repair --remove-shadowed
 stackmarshal init
+stackmarshal migrate --dry-run
 stackmarshal invocation "StackMarshalを使って実装して"
 stackmarshal start --mode build --budget standard \
   --invocation "StackMarshalを使って実装して"
-stackmarshal doctor --host-skill-version 1.1.4
+stackmarshal doctor --host-skill-version 1.1.5
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -243,6 +248,9 @@ stackmarshal activity record tool-call --amount 2 --detail "bounded host-tool ba
 stackmarshal task add implement --summary "機能を実装" --acceptance "tests pass"
 stackmarshal task start implement
 stackmarshal task complete implement --evidence "tests/test_feature.py passed"
+stackmarshal state transition CORRECTION
+stackmarshal activity record correction --detail "bounded verification fix"
+stackmarshal state transition VERIFICATION
 stackmarshal finalize
 stackmarshal state transition COMPLETE
 stackmarshal candidate score candidate.json
@@ -250,11 +258,12 @@ stackmarshal failure fingerprint failure.json
 stackmarshal progress evaluate current.json --previous previous.json
 stackmarshal lock verify .stackmarshal/project/locks/dependencies.lock.json
 stackmarshal checkpoint create --next-action "外部ブロッカーを解消する"
-stackmarshal resume inspect
+stackmarshal resume <run-id> --reason "blocker resolved"
+stackmarshal resume inspect --run-id <run-id>
 ```
 
-機械出力はJSONです。invalid input/state、budget exhausted、approval、unsafe、
-external blocked、checkpoint、completeをexit codeで区別します。
+機械出力はJSONです。明示的checkpoint作成が成功した場合はexit 0でterminal statusと成功を返します。
+formal stop commandは引き続きbudget、approval、unsafe、external blockedを非zero exit codeで区別します。
 
 ## Workflow
 
@@ -269,12 +278,15 @@ flowchart TD
   F --> G[Task Graph]
   G --> B[有限実装]
   B --> V[検証]
+  V -->|bounded fix| Q[Correction]
+  Q --> V
   V -->|全必須条件に証拠| X[COMPLETE]
-  V -->|正式停止| H[Checkpoint / Resume]
+  V -->|正式停止| H[Checkpoint]
+  H -->|validated resume| V
 ```
 
 正式停止状態は`BUDGET_EXHAUSTED`、`STAGNATED`、`REPEATED_FAILURE`、
-`APPROVAL_REQUIRED`、`BLOCKED_EXTERNAL`、`UNSAFE_DEPENDENCY`、
+`APPROVAL_REQUIRED`、`BLOCKED_EXTERNAL`、`VERIFICATION_EXTERNAL_BLOCKED`、`UNSAFE_DEPENDENCY`、
 `SCOPE_DRIFT`、`INVALID_STATE`、`USER_CANCELLED`です。
 
 ## Case Study

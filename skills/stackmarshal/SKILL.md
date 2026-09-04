@@ -8,7 +8,7 @@ description: >
   "使用 StackMarshal 实现", or "$stackmarshal". Do not use for ordinary coding
   requests, explanations, comparisons, or text edits that merely mention the name.
 metadata:
-  version: "1.1.4"
+  version: "1.1.5"
 ---
 
 # StackMarshal
@@ -20,7 +20,7 @@ convergence: either `COMPLETE` with evidence or a formal, resumable stop.
 
 Before any work, verify host readiness and invocation in this order:
 
-1. Run `python scripts/stackmarshal_core.py host-ready --version "1.1.4"`.
+1. Run `python scripts/stackmarshal_core.py host-ready --version "1.1.5"`.
    The installer leaves a restart-pending marker outside the Skill directory. Only a
    matching newly loaded Skill may acknowledge and clear it. If this command reports
    `ready: false`, stop with `INVALID_STATE` and require a Codex restart.
@@ -31,7 +31,7 @@ Before any work, verify host readiness and invocation in this order:
    is not triggered, stop this skill and answer normally. A stale pre-restart Skill
    still invokes the replaced on-disk fallback; while the marker exists, that fallback
    refuses invocation with `restart_required` instead of silently emulating the new Skill.
-4. Run `stackmarshal doctor --host-skill-version "1.1.4"` before project work. A Skill,
+4. Run `stackmarshal doctor --host-skill-version "1.1.5"` before project work. A Skill,
    CLI, or host-version mismatch is `INVALID_STATE`.
 
 Never infer invocation from an ordinary coding request. Never invoke StackMarshal recursively.
@@ -134,7 +134,9 @@ a safe fallback. Do not switch tools to avoid root-cause analysis.
 
 Transition to `VERIFICATION` before quality gates. Verify build, lint, type checking,
 unit, integration, E2E where applicable, security checks, and every mandatory acceptance
-criterion. Complete verification tasks with evidence, then record a live `verification`
+criterion. For bounded corrections discovered by verification that do not change architecture or
+task planning, use `VERIFICATION -> CORRECTION -> VERIFICATION`; record `correction` activity and
+do not spend the architecture-replan budget for those fixes. Complete verification tasks with evidence, then record a live `verification`
 activity after the final verification command so the Core binds that evidence boundary to
 the terminal workspace fingerprint. `VERIFICATION -> COMPLETE` is rejected when mandatory tasks are stale,
 live implementation/verification activity is missing, the observable tool budget was
@@ -156,7 +158,7 @@ user explicitly requests a separate post-run action.
 Stop in priority order: safety, user cancellation, approval, invalid state, budget,
 repeated failure, stagnation, scope drift, external blocker. Use formal statuses:
 `CHECKPOINT_READY`, `BUDGET_EXHAUSTED`, `STAGNATED`, `REPEATED_FAILURE`,
-`APPROVAL_REQUIRED`, `BLOCKED_EXTERNAL`, `UNSAFE_DEPENDENCY`, `SCOPE_DRIFT`,
+`APPROVAL_REQUIRED`, `BLOCKED_EXTERNAL`, `VERIFICATION_EXTERNAL_BLOCKED`, `UNSAFE_DEPENDENCY`, `SCOPE_DRIFT`,
 `INVALID_STATE`, or `USER_CANCELLED`.
 
 Never remove limits to pass a test. One replan is allowed after stagnation; stop if
@@ -169,9 +171,12 @@ partial acquisition, and create checkpoint JSON plus Markdown with one next acti
 do-not-repeat entries, resume command, test evidence, changed files, project
 identity, Git HEAD, and remaining budget.
 
-Resume validates schema, integrity, project identity, Git state, provenance, and
-locks. Skip completed audits, rejected candidates, failed PoCs, passed tests, and
-frozen decisions unless their inputs changed.
+Resume with `stackmarshal resume <run-id>`. It validates the signed checkpoint, project identity,
+Git state, exact worktree fingerprint, and recorded resume phase before returning the same run id
+to `RUNNING`. Only explicitly resumable stops such as `CHECKPOINT_READY`, external verification/
+dependency blocks, and approval waits may reopen; exhausted/unsafe terminal states remain closed.
+Skip completed audits, rejected candidates, failed PoCs, passed tests, and frozen decisions unless
+their inputs changed.
 
 Read `references/checkpoint-policy.md`.
 

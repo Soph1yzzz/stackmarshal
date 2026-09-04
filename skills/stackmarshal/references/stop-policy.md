@@ -11,7 +11,12 @@ two non-improving cycles, allow one replan; stop after another non-improving cyc
 Normalize command class, error class, target, message, suspected cause, and environment
 into a failure fingerprint. Do not repeat a fingerprint at its limit.
 
-Stop priority: safety, cancellation, approval, invalid state, budget, repeated
-failure, stagnation, scope drift, external blocker. Flush state, inspect changes,
-rollback broken acquisition, create a checkpoint, record one next action and a
-do-not-repeat list, then show the resume command.
+Small verification corrections do not consume `architecture_replans`; use the CORRECTION lane
+unless architecture or task planning actually changes.
+
+Stop priority: safety, cancellation, approval, invalid state, budget, repeated failure, stagnation,
+scope drift, external-verification blocker, generic external blocker. `VERIFICATION_EXTERNAL_BLOCKED`
+is for temporarily unavailable network/service verification and is not code failure or stagnation.
+Flush state, inspect changes, rollback broken acquisition, create a checkpoint, record one next
+action and a do-not-repeat list, then show the exact `stackmarshal resume <run-id>` command when the
+status is resumable.

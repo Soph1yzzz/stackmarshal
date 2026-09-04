@@ -16,6 +16,7 @@ class StopSignals:
     stagnated: bool = False
     scope_drift: bool = False
     external_blocker: bool = False
+    verification_external_blocked: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +35,7 @@ _STOP_ORDER: tuple[tuple[str, Status, str], ...] = (
     ("repeated_failure", Status.REPEATED_FAILURE, "A failure fingerprint reached its limit"),
     ("stagnated", Status.STAGNATED, "No observable progress remained after replanning"),
     ("scope_drift", Status.SCOPE_DRIFT, "The required scope exceeded its bounded allowance"),
+    ("verification_external_blocked", Status.VERIFICATION_EXTERNAL_BLOCKED, "External verification is temporarily blocked"),
     ("external_blocker", Status.BLOCKED_EXTERNAL, "An external dependency blocks progress"),
 )
 
