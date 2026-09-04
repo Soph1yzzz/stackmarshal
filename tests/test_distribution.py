@@ -460,10 +460,16 @@ def test_json_schemas_are_valid_and_accept_runtime_examples(tmp_path: Path) -> N
     )
 
 
-def _run_script(script: str, *args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def _run_script(
+    script: str,
+    *args: str,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(ROOT / "skills" / "stackmarshal" / "scripts" / script), *args],
         cwd=cwd or ROOT,
+        env=env,
         check=False,
         capture_output=True,
         text=True,
@@ -541,7 +547,13 @@ def test_skill_fallback_blocks_stale_host_until_matching_version_acknowledges_re
 
 
 def test_dependency_free_skill_fallback_commands(tmp_path: Path) -> None:
-    invocation = _run_script("stackmarshal_core.py", "invocation", "StackMarshalを使って実装して")
+    codex_home = tmp_path / "codex"
+    codex_home.mkdir()
+    env = os.environ.copy()
+    env["CODEX_HOME"] = str(codex_home)
+    invocation = _run_script(
+        "stackmarshal_core.py", "invocation", "StackMarshalを使って実装して", env=env
+    )
     assert invocation.returncode == 0
     assert json.loads(invocation.stdout)["mode"] == "build"
 

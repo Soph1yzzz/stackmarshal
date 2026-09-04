@@ -319,6 +319,98 @@ def test_component_specific_action_and_downgrade_classification() -> None:
     assert installer.classify_install_action("1.0.0", cli_versions, ("cli",)) == "repair"  # type: ignore[attr-defined]
 
 
+def test_old_version_cleanup_defers_only_windows_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    installer = _load_installer()
+    install_root = tmp_path / "app"
+    versions = install_root / "versions"
+    current = versions / "v1.1.6"
+    old = versions / "v1.1.5"
+    current.mkdir(parents=True)
+    old.mkdir()
+
+    original_safe_remove = installer.safe_remove  # type: ignore[attr-defined]
+
+    def locked_remove(path: Path, root: Path) -> None:
+        if path == old:
+            raise PermissionError(13, "locked")
+        original_safe_remove(path, root)
+
+    monkeypatch.setattr(installer, "safe_remove", locked_remove)
+    removed, deferred = installer.remove_old_versions(  # type: ignore[attr-defined]
+        versions, current, install_root, platform_name="nt"
+    )
+    assert removed == []
+    assert deferred == ["v1.1.5"]
+    assert old.exists()
+
+    with pytest.raises(PermissionError):
+        installer.remove_old_versions(  # type: ignore[attr-defined]
+            versions, current, install_root, platform_name="posix"
+        )
+
+
+def test_deferred_windows_cleanup_script_removes_only_old_version(tmp_path: Path) -> None:
+    installer = _load_installer()
+    install_root = tmp_path / "app"
+    versions = install_root / "versions"
+    old = versions / "v1.1.5"
+    current = versions / "v1.1.6"
+    old.mkdir(parents=True)
+    current.mkdir()
+    (old / "stale.txt").write_text("old", encoding="utf-8")
+    (current / "current.txt").write_text("current", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            installer._DEFERRED_WINDOWS_CLEANUP,  # type: ignore[attr-defined]
+            str(install_root),
+            current.name,
+            old.name,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert not old.exists()
+    assert current.is_dir()
+    assert (current / "current.txt").read_text(encoding="utf-8") == "current"
+
+
+def test_deferred_cleanup_schedule_uses_new_version_python(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    installer = _load_installer()
+    install_root = tmp_path / "app"
+    current = install_root / "versions" / "v1.1.6"
+    (current / "venv").mkdir(parents=True)
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    monkeypatch.setattr(installer, "venv_python", lambda path: Path(sys.executable))
+
+    def fake_popen(command: list[str], **kwargs: object) -> object:
+        calls.append((command, kwargs))
+        return object()
+
+    monkeypatch.setattr(installer.subprocess, "Popen", fake_popen)
+    assert installer.schedule_deferred_version_cleanup(  # type: ignore[attr-defined]
+        install_root, current, ["v1.1.5"], platform_name="nt"
+    )
+    assert len(calls) == 1
+    command, kwargs = calls[0]
+    assert Path(command[0]).resolve() == Path(sys.executable).resolve()
+    assert command[-3:] == [str(install_root), "v1.1.6", "v1.1.5"]
+    assert kwargs["stdin"] is subprocess.DEVNULL
+    assert kwargs["stdout"] is subprocess.DEVNULL
+    assert kwargs["stderr"] is subprocess.DEVNULL
+
+
 def test_installer_bootstraps_require_git_and_verify_release_installer() -> None:
     powershell = (ROOT / "scripts" / "install.ps1").read_text(encoding="utf-8")
     shell = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")

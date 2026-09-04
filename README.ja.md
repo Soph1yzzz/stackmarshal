@@ -204,7 +204,7 @@ stackmarshal version
 再現性のためexact releaseへ固定する場合：
 
 ```bash
-stackmarshal pin 1.1.5
+stackmarshal pin 1.1.6
 ```
 
 `stackmarshal version`は人間向け確認で、実行中CLI、managed pin、installed Skill、resolved launcher、
@@ -225,7 +225,7 @@ restart-pending markerを残します。再起動前の古いSkillはStackMarsha
 Skillだけを手動導入する場合も、`main`ではなく対応するRelease tagへ固定します。
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.5/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.6/skills/stackmarshal
 ```
 
 ## CLI例
@@ -240,7 +240,7 @@ stackmarshal migrate --dry-run
 stackmarshal invocation "StackMarshalを使って実装して"
 stackmarshal start --mode build --budget standard \
   --invocation "StackMarshalを使って実装して"
-stackmarshal doctor --host-skill-version 1.1.5
+stackmarshal doctor --host-skill-version 1.1.6
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check

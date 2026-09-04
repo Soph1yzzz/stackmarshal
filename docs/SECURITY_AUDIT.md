@@ -131,6 +131,24 @@ external-verification status, existing-ignore behavior, Windows UTF-8 evidence, 
 shadowed-launcher cleanup. A known unresolved material security finding would still block release;
 the focused review found none at this stage.
 
+## v1.1.6 focused Windows cleanup review
+
+v1.1.6 is limited to a Windows self-update cleanup defect where the still-running updater CLI can
+hold its previous managed venv `python.exe` open until the install subprocess returns. The release
+does not change release resolution, checksum verification, installer rollback, pin authority, PATH,
+Skill replacement, or downgrade semantics.
+
+The focused review requires deferred cleanup to accept only Windows sharing/access lock failures,
+strict `vMAJOR.MINOR.PATCH` directory names, and paths contained below the managed `versions/`
+directory. The helper refuses the current version, uses the newly installed version's isolated
+Python directly with no shell, inherits no stdio, and retries for a bounded period. Non-lock cleanup
+errors are not silently classified as deferred. Tests exercise lock classification, helper
+containment/current-version preservation, and new-version-Python scheduling. CI, CodeQL, release
+asset integrity, and a real Windows managed self-update remain mandatory. Because this is a narrow
+cleanup-path patch around an already verified installer rather than a new update authority, the
+maintainer records focused review + adversarial regressions + CI/CodeQL instead of a full repository
+security scan.
+
 ## Scope limitation
 
 The application threat model excludes kernel compromise and malware already executing as the

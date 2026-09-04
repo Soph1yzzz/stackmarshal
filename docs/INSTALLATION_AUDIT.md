@@ -136,6 +136,19 @@ them as StackMarshal. Unknown or provenance-free executables are skipped and rep
 The removal flag is explicit because deleting a launcher outside the managed install is a global
 filesystem mutation.
 
+## v1.1.6 Windows self-update cleanup addendum
+
+A real managed v1.1.4 -> v1.1.5 pin update showed that Windows can keep the updater CLI's old
+versioned venv `python.exe` open until the parent CLI exits. Authority had already converged to the
+new version, but the old managed directory could remain after best-effort cleanup with WinError 5.
+
+v1.1.6 keeps synchronous cleanup as the default. Only Windows sharing/access lock errors are
+deferred. A shell-free helper is launched with the newly installed version's Python and retries the
+strictly validated old `vMAJOR.MINOR.PATCH` directories for a bounded period after the updater exits.
+The helper refuses the current version, validates containment under the managed `versions/` root,
+and does not convert unrelated cleanup failures into success. Release acceptance requires a real
+Windows managed pin update demonstrating that the old managed version directory disappears.
+
 ## Residual limitations
 
 - The one-time first bootstrap script is trusted through HTTPS delivery from the GitHub Release.

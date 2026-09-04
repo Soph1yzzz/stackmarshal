@@ -28,6 +28,7 @@
 - [x] install, update, same-version repair, CLI-only, Skill-only, no-PATH, and explicit downgrade modes
 - [x] post-install doctor and ignored isolated installation audit
 - [x] explicit managed repair plus high-confidence-only optional shadowed-launcher removal
+- [x] Windows self-update old-version cleanup defers only lock errors and retries from the newly installed venv after updater exit
 
 ## Quality
 

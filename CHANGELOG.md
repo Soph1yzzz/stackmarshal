@@ -2,6 +2,17 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
+## [1.1.6] - 2026-09-04
+
+### Fixed
+
+- Avoid leaving the updating CLI's previous managed version directory behind on Windows when its running `python.exe` temporarily locks the old venv during `stackmarshal pin` self-update.
+- Defer only Windows sharing/access lock failures, then retry bounded old-version cleanup from the newly installed version's Python after the old CLI exits; non-lock cleanup errors remain fail-closed/visible.
+
+### Changed
+
+- Move the previously planned operator UX / fully non-invasive initialization work from v1.1.6 to v1.1.7 without changing that scope.
+
 ## [1.1.5] - 2026-09-04
 
 ### Added

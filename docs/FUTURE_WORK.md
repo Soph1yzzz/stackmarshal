@@ -1,6 +1,6 @@
 # Future Work
 
-Items intentionally outside the v1.1.5 dogfood recovery-hardening scope:
+Items intentionally outside the v1.1.6 Windows self-update cleanup hotfix scope:
 
 - Claude Code, Gemini CLI, Cline, GitHub Copilot, and OpenHands adapters.
 - Multi-agent research/build/review orchestration.
@@ -29,7 +29,11 @@ The next intended sequencing is:
   - bounded `VERIFICATION -> CORRECTION -> VERIFICATION` without spending architecture-replan budget,
   - run-level external-block propagation, first-class external-verification blocking, UTF-8 CLI evidence, successful checkpoint exit semantics,
   - avoid `.gitignore` mutation when Git already ignores StackMarshal state, plus explicit high-confidence shadowed-launcher repair.
-- **v1.1.6 — Operator UX / fully non-invasive operation**
+- **v1.1.6 — Windows self-update cleanup hotfix**
+  - defer only Windows file-lock cleanup failures from the updating CLI's old version directory,
+  - use the newly installed version's Python to retry cleanup after the old CLI exits,
+  - preserve fail-closed behavior for non-lock cleanup errors and unsafe paths.
+- **v1.1.7 — Operator UX / fully non-invasive operation**
   - repository-external/local initialization mode beyond the v1.1.5 existing-ignore optimization,
   - separate environment inventory from delivery-quality audit,
   - compact human CLI output with explicit full JSON mode.

@@ -212,7 +212,7 @@ stackmarshal version
 Pin an exact release when reproducibility matters:
 
 ```bash
-stackmarshal pin 1.1.5
+stackmarshal pin 1.1.6
 ```
 
 `stackmarshal version` is the human check: it reports the running CLI, exact managed pin,
@@ -236,7 +236,7 @@ after restart before work can begin.
 For a Skill-only manual installation, use the matching release tag:
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.5/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.6/skills/stackmarshal
 ```
 
 ## Quick CLI tour
@@ -251,7 +251,7 @@ stackmarshal migrate --dry-run
 stackmarshal invocation "Use StackMarshal to build this"
 stackmarshal start --mode build --budget standard \
   --invocation "Use StackMarshal to build this"
-stackmarshal doctor --host-skill-version 1.1.5
+stackmarshal doctor --host-skill-version 1.1.6
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -387,7 +387,7 @@ behavior is a v1 release requirement.
 `python scripts/build_release.py` resolves the current version from `pyproject.toml` and produces:
 
 - `install.ps1`, `install.sh`, and the shared verified `installer.py`
-- `stackmarshal-skill-v1.1.5.zip`
+- `stackmarshal-skill-v1.1.6.zip`
 - Python wheel and source distribution
 - source archive
 - `SHA256SUMS`

@@ -788,14 +788,111 @@ def prepare_skill_swap(
     return new_hash, user_backup, temporary
 
 
-def remove_old_versions(versions_root: Path, current: Path, install_root: Path) -> None:
+def _windows_lock_error(exc: BaseException, *, platform_name: str = os.name) -> bool:
+    if platform_name != "nt":
+        return False
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, PermissionError):
+            return True
+        if isinstance(current, OSError) and getattr(current, "winerror", None) in {5, 32}:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def remove_old_versions(
+    versions_root: Path,
+    current: Path,
+    install_root: Path,
+    *,
+    platform_name: str = os.name,
+) -> tuple[list[str], list[str]]:
+    removed: list[str] = []
+    deferred: list[str] = []
     if not versions_root.exists():
-        return
+        return removed, deferred
     for child in versions_root.iterdir():
-        if child == current:
+        if child == current or not VERSION_RE.fullmatch(child.name):
             continue
-        if VERSION_RE.fullmatch(child.name):
+        try:
             safe_remove(child, install_root)
+        except Exception as exc:
+            if _windows_lock_error(exc, platform_name=platform_name):
+                deferred.append(child.name)
+                continue
+            raise
+        removed.append(child.name)
+    return removed, deferred
+
+
+_DEFERRED_WINDOWS_CLEANUP = r"""
+import pathlib
+import re
+import shutil
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1]).resolve()
+versions = (root / "versions").resolve()
+current = sys.argv[2]
+pending = list(sys.argv[3:])
+version_re = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
+if not versions.is_dir() or current in pending:
+    raise SystemExit(2)
+for name in pending:
+    if not version_re.fullmatch(name):
+        raise SystemExit(2)
+for _ in range(80):
+    remaining = []
+    for name in pending:
+        path = versions / name
+        try:
+            if not path.exists():
+                continue
+            if path.is_symlink():
+                raise SystemExit(2)
+            resolved = path.resolve()
+            if versions not in resolved.parents:
+                raise SystemExit(2)
+            shutil.rmtree(resolved)
+        except (PermissionError, OSError):
+            remaining.append(name)
+    if not remaining:
+        raise SystemExit(0)
+    pending = remaining
+    time.sleep(0.25)
+raise SystemExit(1)
+"""
+
+
+def schedule_deferred_version_cleanup(
+    install_root: Path,
+    current: Path,
+    deferred: list[str],
+    *,
+    platform_name: str = os.name,
+) -> bool:
+    if platform_name != "nt" or not deferred:
+        return False
+    for name in deferred:
+        if not VERSION_RE.fullmatch(name) or name == current.name:
+            raise InstallError(f"Unsafe deferred version cleanup target: {name!r}")
+    python = venv_python(current / "venv")
+    creationflags = 0
+    for attribute in ("DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP", "CREATE_NO_WINDOW"):
+        creationflags |= int(getattr(subprocess, attribute, 0))
+    subprocess.Popen(
+        [str(python), "-I", "-c", _DEFERRED_WINDOWS_CLEANUP, str(install_root), current.name, *deferred],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+        creationflags=creationflags,
+    )
+    return True
 
 
 def targeted_components(*, cli_only: bool, skill_only: bool) -> tuple[str, ...]:
@@ -1033,10 +1130,28 @@ def main(argv: list[str] | None = None) -> int:
                 except Exception as cleanup_error:
                     cleanup_warnings.append(str(cleanup_error))
             if not args.skill_only:
+                deferred_versions: list[str] = []
                 try:
-                    remove_old_versions(install_root / "versions", version_dir, install_root)
+                    _, deferred_versions = remove_old_versions(
+                        install_root / "versions", version_dir, install_root
+                    )
                 except Exception as cleanup_error:
                     cleanup_warnings.append(str(cleanup_error))
+                if deferred_versions:
+                    try:
+                        scheduled = schedule_deferred_version_cleanup(
+                            install_root, version_dir, deferred_versions
+                        )
+                    except Exception as cleanup_error:
+                        cleanup_warnings.append(
+                            f"Could not schedule deferred old-version cleanup: {cleanup_error}"
+                        )
+                    else:
+                        if scheduled:
+                            cleanup_warnings.append(
+                                "Deferred Windows cleanup scheduled for locked old versions: "
+                                + ", ".join(deferred_versions)
+                            )
                 try:
                     path_changed, path_note = install_path(
                         bin_dir, assume_yes=args.yes, no_path=args.no_path

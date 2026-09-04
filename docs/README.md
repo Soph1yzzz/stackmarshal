@@ -25,6 +25,7 @@ Use [REQUIREMENTS_TRACEABILITY.md](REQUIREMENTS_TRACEABILITY.md) to map requirem
 ## Release
 
 - [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) — current release process and required gates.
+- [RELEASE_NOTES_v1.1.6.md](RELEASE_NOTES_v1.1.6.md) — v1.1.6 Windows self-update cleanup hotfix for locked old managed venvs.
 - [RELEASE_NOTES_v1.1.5.md](RELEASE_NOTES_v1.1.5.md) — v1.1.5 dogfood recovery hardening: real resume, legacy archival, correction lane, and evidence/CLI fixes.
 - [RELEASE_NOTES_v1.1.4.md](RELEASE_NOTES_v1.1.4.md) — v1.1.4 pin/version workflow and managed version-skew convergence.
 - [RELEASE_NOTES_v1.1.3.md](RELEASE_NOTES_v1.1.3.md) — v1.1.3 runtime-trust hardening derived from MandateMarshal field use.
