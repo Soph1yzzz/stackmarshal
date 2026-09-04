@@ -99,7 +99,16 @@ def main(argv: list[str] | None = None) -> int:
             if args.direct_installer:
                 result = _run_direct_installer(base_url, install_root, codex_home, release)
             else:
-                result = _run_bootstrap(base_url, install_root, codex_home, release)
+                try:
+                    result = _run_bootstrap(base_url, install_root, codex_home, release)
+                except PermissionError as exc:
+                    print(
+                        "Platform bootstrap shell could not be spawned by this host; "
+                        "falling back to the shared installer smoke. "
+                        f"({exc})",
+                        file=sys.stderr,
+                    )
+                    result = _run_direct_installer(base_url, install_root, codex_home, release)
 
         if '"installed": true' not in result.stdout:
             raise RuntimeError(f"Installer did not report success:\n{result.stdout}")

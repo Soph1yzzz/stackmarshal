@@ -66,6 +66,10 @@ The first command re-runs the current managed pin through the verified atomic in
 
 For workspaces that are not their own Git repository, checkpoint worktree identity now falls back to StackMarshal's workspace fingerprint instead of `None`. A file changed after checkpoint creation therefore invalidates resume in non-Git workspaces as well.
 
+## Release-smoke host fallback
+
+The immutable release smoke still exercises the platform bootstrap normally. If the local host OS itself refuses spawning that bootstrap shell with `PermissionError`, the smoke now falls back to the shared installer path that the bootstrap delegates to. Other bootstrap failures remain failures. Public CI continues to exercise the real Windows/macOS/Linux bootstrap path, so this fallback does not replace cross-platform bootstrap coverage.
+
 ## Scope discipline
 
 The previously planned delivery-quality audit and compact human output remain useful, but they move unchanged to v1.1.6. This release stays focused on issues directly demonstrated by field use: truthful stopping, truthful recovery, state compatibility, bounded correction, and operator-facing evidence correctness.

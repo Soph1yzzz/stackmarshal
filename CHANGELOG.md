@@ -23,6 +23,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 ### Changed
 
 - Move the remaining fully non-invasive init, delivery-audit, and compact-output roadmap work from v1.1.5 to v1.1.6 after dogfood exposed higher-priority recovery correctness issues.
+- Let the local immutable release smoke fall back to the shared installer only when the host OS explicitly refuses spawning the platform bootstrap shell; public CI continues to exercise the real Windows/macOS/Linux bootstrap path.
 
 ## [1.1.4] - 2026-09-03
 
