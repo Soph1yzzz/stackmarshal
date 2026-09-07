@@ -21,6 +21,15 @@ from .checkpoint import create_checkpoint, inspect_checkpoint
 from .config import default_config, load_config
 from .constants import Mode, Phase, STATE_DIR, Status, __version__
 from .failure import fingerprint
+from .hostwrite import (
+    HostWriteError,
+    abort_pending_plan,
+    acknowledge_pending_plan,
+    check_pending_plan,
+    create_pending_plan,
+    pending_status,
+    require_no_pending_plan,
+)
 from .lock import verify_lock
 from .migration import MigrationError, migrate_legacy_state
 from .models import ProgressSnapshot
@@ -53,6 +62,15 @@ from .taskgraph import (
     start_task,
 )
 from .validation import validate_json_file
+from .workspace_io import HostPlanWorkspaceWriter, use_writer
+from .workspace_io import copy_text as workspace_copy_text
+from .workspace_io import exists as workspace_exists
+from .workspace_io import is_file as workspace_is_file
+from .workspace_io import mkdir as workspace_mkdir
+from .workspace_io import planned_paths_under as workspace_planned_paths_under
+from .workspace_io import read_bytes as workspace_read_bytes
+from .workspace_io import read_text as workspace_read_text
+from .workspace_io import write_text as workspace_write_text
 
 EXIT_INVALID_INPUT = 2
 EXIT_INVALID_STATE = 3
@@ -76,7 +94,15 @@ def _configure_stdio_utf8() -> None:
             continue
 
 
+_CAPTURE_JSON = False
+_CAPTURED_JSON: Any = None
+
+
 def _json(data: Any) -> None:
+    global _CAPTURED_JSON
+    if _CAPTURE_JSON:
+        _CAPTURED_JSON = data
+        return
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
@@ -197,7 +223,7 @@ def _record_phase_snapshot(state: Any, root: Path, target: Phase) -> dict[str, A
 
 
 def _sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(workspace_read_bytes(path)).hexdigest()
 
 
 def _safe_finalization_project(root: Path, *, require_audit: bool) -> Path:
@@ -218,14 +244,15 @@ def _safe_finalization_project(root: Path, *, require_audit: bool) -> Path:
 
     required = [project / "task-graph.json", project / "task-graph.md"]
     audit = project / "environment-audit.json"
-    if require_audit or audit.exists() or audit.is_symlink():
+    if require_audit or workspace_exists(audit) or audit.is_symlink():
         required.append(audit)
     for path in required:
-        if path.is_symlink() or not path.is_file():
+        if path.is_symlink() or not workspace_is_file(path):
             raise ValueError(f"Finalization file is missing or unsafe: {path.relative_to(project).as_posix()}")
-        resolved = path.resolve(strict=True)
-        if project.resolve(strict=True) not in resolved.parents:
-            raise ValueError(f"Finalization file escapes project state: {path.relative_to(project).as_posix()}")
+        if path.exists():
+            resolved = path.resolve(strict=True)
+            if project.resolve(strict=True) not in resolved.parents:
+                raise ValueError(f"Finalization file escapes project state: {path.relative_to(project).as_posix()}")
 
     temporary = project / "task-graph.json.tmp"
     if temporary.is_symlink():
@@ -259,6 +286,11 @@ def _finalization_files(root: Path) -> dict[str, Path]:
                 pending.append(path)
             else:
                 raise ValueError(f"Finalization project evidence contains unsupported entry: {relative}")
+    for path in workspace_planned_paths_under(project):
+        if not workspace_is_file(path):
+            continue
+        relative_name = path.relative_to(project).as_posix()
+        files[relative_name] = path
     return files
 
 
@@ -344,24 +376,24 @@ def _stackmarshal_runs_already_ignored(root: Path) -> bool:
 def cmd_init(args: argparse.Namespace) -> int:
     root = _root(args.root)
     paths = _paths(root)
-    paths["project"].mkdir(parents=True, exist_ok=True)
-    paths["runs"].mkdir(parents=True, exist_ok=True)
-    if not paths["config"].exists():
+    workspace_mkdir(paths["project"], parents=True, exist_ok=True)
+    workspace_mkdir(paths["runs"], parents=True, exist_ok=True)
+    if not workspace_exists(paths["config"]):
         template = Path(__file__).with_name("data") / "stackmarshal.toml"
-        shutil.copyfile(template, paths["config"])
+        workspace_copy_text(template, paths["config"], encoding="utf-8")
     gitignore = root / ".gitignore"
     _assert_workspace_entry(root, gitignore, expected="file")
     marker = ".stackmarshal/runs/\n!.stackmarshal/runs/*/checkpoint.md\n!.stackmarshal/runs/*/checkpoint.json\n"
     gitignore_mutated = False
     already_ignored = _stackmarshal_runs_already_ignored(root)
     if not already_ignored:
-        if gitignore.exists():
-            current = gitignore.read_text(encoding="utf-8")
+        if workspace_exists(gitignore):
+            current = workspace_read_text(gitignore, encoding="utf-8")
             if ".stackmarshal/runs/" not in current:
-                gitignore.write_text(current.rstrip() + "\n" + marker, encoding="utf-8")
+                workspace_write_text(gitignore, current.rstrip() + "\n" + marker, encoding="utf-8")
                 gitignore_mutated = True
         else:
-            gitignore.write_text(marker, encoding="utf-8")
+            workspace_write_text(gitignore, marker, encoding="utf-8")
             gitignore_mutated = True
     _json({
         "initialized": True,
@@ -1293,7 +1325,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 {json.dumps(state.stop_reason, indent=2, ensure_ascii=False)}
 ```
 """
-    report_path.write_text(report, encoding="utf-8")
+    workspace_write_text(report_path, report, encoding="utf-8")
     _json({"report": str(report_path), "status": state.status.value})
     return EXIT_COMPLETE if state.status is Status.COMPLETE else 0
 
@@ -1304,10 +1336,99 @@ def cmd_invocation(args: argparse.Namespace) -> int:
     return 0 if triggered else EXIT_INVALID_INPUT
 
 
+def cmd_host_write_status(args: argparse.Namespace) -> int:
+    _json(pending_status(_root(args.root)))
+    return 0
+
+
+def cmd_host_write_check(args: argparse.Namespace) -> int:
+    result = check_pending_plan(_root(args.root), args.plan_id)
+    _json(result)
+    return 0 if result["ready_to_apply"] else EXIT_INVALID_STATE
+
+
+def cmd_host_write_ack(args: argparse.Namespace) -> int:
+    result = acknowledge_pending_plan(_root(args.root), args.plan_id)
+    _json(result)
+    return 0 if result["acknowledged"] else EXIT_INVALID_STATE
+
+
+def cmd_host_write_abort(args: argparse.Namespace) -> int:
+    _json(abort_pending_plan(_root(args.root), args.plan_id, args.reason))
+    return 0
+
+
+def _host_plannable(args: argparse.Namespace) -> bool:
+    if args.command in {"init", "start", "activity", "stop", "report", "audit", "finalize"}:
+        return True
+    if args.command == "state":
+        return bool(args.state_command == "transition")
+    if args.command == "task":
+        return bool(args.task_command in {"add", "start", "complete", "block"})
+    if args.command == "checkpoint":
+        return bool(args.checkpoint_command == "create")
+    if args.command == "resume":
+        return bool(args.target != "inspect")
+    return False
+
+
+def _run_host_planned_command(
+    args: argparse.Namespace,
+    func: Callable[[argparse.Namespace], int],
+    raw_argv: list[str],
+) -> int:
+    global _CAPTURE_JSON, _CAPTURED_JSON
+    root = _root(args.root)
+    require_no_pending_plan(root)
+    writer = HostPlanWorkspaceWriter(root)
+    _CAPTURED_JSON = None
+    _CAPTURE_JSON = True
+    try:
+        with use_writer(writer):
+            code = func(args)
+    finally:
+        _CAPTURE_JSON = False
+    result = _CAPTURED_JSON
+    plan = create_pending_plan(
+        root,
+        writer,
+        command=raw_argv,
+        command_result=result,
+        command_exit_code=code,
+    )
+    if plan is None:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return code
+    print(
+        json.dumps(
+            {
+                "host_write": True,
+                "plan_id": plan["plan_id"],
+                "command_exit_code": code,
+                "command_result": result,
+                "plan": plan,
+                "next_action": (
+                    "Apply each signed write_text operation through the host file API using exact "
+                    "preimage replacement when expected_preimage is present, then run host-write ack."
+                ),
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
+    return code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="stackmarshal")
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("--root", default=".")
+    parser.add_argument(
+        "--write-mode",
+        choices=["direct", "host"],
+        default=os.environ.get("STACKMARSHAL_WRITE_MODE", "direct"),
+        help="direct filesystem writes (default) or signed host-file-API mutation plans",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init").set_defaults(func=cmd_init)
@@ -1459,6 +1580,21 @@ def build_parser() -> argparse.ArgumentParser:
     invocation.add_argument("text")
     invocation.set_defaults(func=cmd_invocation)
 
+    host_write = sub.add_parser("host-write")
+    host_write_sub = host_write.add_subparsers(dest="host_write_command", required=True)
+    host_status = host_write_sub.add_parser("status")
+    host_status.set_defaults(func=cmd_host_write_status)
+    host_check = host_write_sub.add_parser("check")
+    host_check.add_argument("--plan-id", required=True)
+    host_check.set_defaults(func=cmd_host_write_check)
+    host_ack = host_write_sub.add_parser("ack")
+    host_ack.add_argument("--plan-id", required=True)
+    host_ack.set_defaults(func=cmd_host_write_ack)
+    host_abort = host_write_sub.add_parser("abort")
+    host_abort.add_argument("--plan-id", required=True)
+    host_abort.add_argument("--reason", required=True)
+    host_abort.set_defaults(func=cmd_host_write_abort)
+
     pin = sub.add_parser("pin")
     pin.add_argument("target", nargs="?", default="status", help="status, latest, or vMAJOR.MINOR.PATCH")
     pin.add_argument("--yes", action="store_true", help="accept installer dependency/PATH prompts")
@@ -1489,11 +1625,29 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     _configure_stdio_utf8()
     parser = build_parser()
+    raw_argv = list(argv) if argv is not None else sys.argv[1:]
     try:
-        args = parser.parse_args(argv)
+        args = parser.parse_args(raw_argv)
         func: Callable[[argparse.Namespace], int] = args.func
+        if args.write_mode == "host":
+            if args.command == "migrate" and not args.dry_run:
+                raise HostWriteError(
+                    "Legacy migration is not host-write plannable yet; use direct mode or archive legacy state before entering a shell-write-restricted host."
+                )
+            if args.command in {"pin", "repair"}:
+                raise HostWriteError("pin/repair are managed-install operations and do not use the project HostWriteAdapter")
+            if _host_plannable(args):
+                return _run_host_planned_command(args, func, raw_argv)
         return func(args)
-    except (FileNotFoundError, ValueError, KeyError, json.JSONDecodeError, PinError, MigrationError) as exc:
+    except (
+        FileNotFoundError,
+        ValueError,
+        KeyError,
+        json.JSONDecodeError,
+        PinError,
+        MigrationError,
+        HostWriteError,
+    ) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return EXIT_INVALID_INPUT
 

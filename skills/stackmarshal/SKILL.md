@@ -8,7 +8,7 @@ description: >
   "使用 StackMarshal 实现", or "$stackmarshal". Do not use for ordinary coding
   requests, explanations, comparisons, or text edits that merely mention the name.
 metadata:
-  version: "1.1.6"
+  version: "1.2.0"
 ---
 
 # StackMarshal
@@ -20,7 +20,7 @@ convergence: either `COMPLETE` with evidence or a formal, resumable stop.
 
 Before any work, verify host readiness and invocation in this order:
 
-1. Run `python scripts/stackmarshal_core.py host-ready --version "1.1.6"`.
+1. Run `python scripts/stackmarshal_core.py host-ready --version "1.2.0"`.
    The installer leaves a restart-pending marker outside the Skill directory. Only a
    matching newly loaded Skill may acknowledge and clear it. If this command reports
    `ready: false`, stop with `INVALID_STATE` and require a Codex restart.
@@ -31,7 +31,7 @@ Before any work, verify host readiness and invocation in this order:
    is not triggered, stop this skill and answer normally. A stale pre-restart Skill
    still invokes the replaced on-disk fallback; while the marker exists, that fallback
    refuses invocation with `restart_required` instead of silently emulating the new Skill.
-4. Run `stackmarshal doctor --host-skill-version "1.1.6"` before project work. A Skill,
+4. Run `stackmarshal doctor --host-skill-version "1.2.0"` before project work. A Skill,
    CLI, or host-version mismatch is `INVALID_STATE`.
 
 Never infer invocation from an ordinary coding request. Never invoke StackMarshal recursively.
@@ -51,7 +51,37 @@ Explicit `$stackmarshal research|prepare|build|resume` wins.
 
 Read project `AGENTS.md`, `README`, manifests, Git status, tests, CI, installed
 Skills, MCP configuration, plugins, and available GitHub integration. Preserve
-existing dirty state. Run `stackmarshal init`, then create exactly one authoritative
+existing dirty state. Before mutating StackMarshal project evidence, inspect the host
+file-write contract. If shell commands may write project files, use the default direct
+mode exactly as before. If shell writes to project files are forbidden but the host
+provides a native file write/edit API (for example DevSpace), use the HostWriteAdapter
+sequence below for every mutating StackMarshal command. If neither path is available,
+stop `INVALID_STATE`; do not pretend the run was fully dogfooded.
+
+### Shell-write-restricted host sequence
+
+1. Invoke the same StackMarshal command with `--write-mode host`, for example
+   `stackmarshal --write-mode host init`. Core computes the mutation but does not write
+   project files; it stores a user-local pending record and returns an HMAC-signed plan.
+2. Run `stackmarshal host-write check --plan-id <id>`. Do not apply a plan whose
+   expected preimage check fails.
+3. Apply each `write_text` operation only through the host file API. Honor the plan's
+   `required_directories`; if the host write primitive creates parents implicitly, that satisfies
+   the requirement. When `expected_preimage` is present, use the host's exact edit/replace primitive
+   with that full preimage as the compare-and-swap guard. When it is null, confirm the target is
+   absent and create it with the host write primitive. Never materialize the plan with
+   shell redirection, Python, `tee`, or another forbidden project-writing path.
+4. Run `stackmarshal host-write ack --plan-id <id>`. Core verifies every postimage hash
+   before the plan is acknowledged. Never issue the next mutating StackMarshal command
+   while a plan is pending. Use `host-write abort` only for an intentionally abandoned
+   unapplied plan.
+
+The direct and host paths share the same Core state machine, HMAC authority, budgets,
+acceptance gates, checkpoint rules, and finalization semantics; only the write transport
+differs. `migrate` is not host-write plannable in v1.2.0, and managed-install `pin` / `repair`
+remain outside the project HostWriteAdapter.
+
+Run `stackmarshal init`, then create exactly one authoritative
 run with `stackmarshal start`. Reuse that run ID until it reaches a terminal state;
 never create a replacement run merely because Git is initialized or the workspace
 identity gains repository lineage. StackMarshal deliberately ignores an ancestor

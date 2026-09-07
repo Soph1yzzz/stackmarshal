@@ -13,6 +13,10 @@ from typing import Any
 from .config import Config
 from .constants import Mode, Phase, SCHEMA_VERSION, Status
 from .integrity import ensure_signing_key_outside, sign_record, verify_record
+from .workspace_io import append_text as workspace_append_text
+from .workspace_io import exists as workspace_exists
+from .workspace_io import read_text as workspace_read_text
+from .workspace_io import write_text as workspace_write_text
 from .models import BudgetState, Invocation, ProjectInfo, RunState
 
 RUN_ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
@@ -385,10 +389,12 @@ def save_state(state: RunState, path: Path) -> None:
     project_root = Path(state.project.root)
     ensure_signing_key_outside(project_root)
     signed = sign_record(state.to_dict())
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(signed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    workspace_write_text(
+        path,
+        json.dumps(signed, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+        atomic=True,
+    )
 
 
 def load_state(path: Path, *, project_root: Path | None = None) -> RunState:
@@ -409,11 +415,9 @@ def load_state(path: Path, *, project_root: Path | None = None) -> RunState:
 
 
 def append_event(path: Path, event_type: str, phase: Phase, payload: dict[str, Any]) -> dict[str, Any]:
-    path.parent.mkdir(parents=True, exist_ok=True)
     seq = 1
-    if path.exists():
-        with path.open(encoding="utf-8") as handle:
-            seq = sum(1 for _ in handle) + 1
+    if workspace_exists(path):
+        seq = len(workspace_read_text(path, encoding="utf-8").splitlines()) + 1
     canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     event = {
         "seq": seq,
@@ -423,8 +427,7 @@ def append_event(path: Path, event_type: str, phase: Phase, payload: dict[str, A
         "payload_hash": hashlib.sha256(canonical.encode()).hexdigest(),
         "payload": payload,
     }
-    with path.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+    workspace_append_text(path, json.dumps(event, ensure_ascii=False) + "\n", encoding="utf-8")
     return event
 
 

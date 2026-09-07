@@ -383,6 +383,62 @@ def test_deferred_windows_cleanup_script_removes_only_old_version(tmp_path: Path
     assert (current / "current.txt").read_text(encoding="utf-8") == "current"
 
 
+def test_old_version_cleanup_removes_stale_swap_backup(tmp_path: Path) -> None:
+    installer = _load_installer()
+    install_root = tmp_path / "app"
+    versions = install_root / "versions"
+    current = versions / "v1.2.0"
+    stale = versions / ".v1.1.6.old-0123456789abcdef0123456789abcdef"
+    current.mkdir(parents=True)
+    stale.mkdir()
+    (stale / "stale.txt").write_text("stale", encoding="utf-8")
+
+    removed, deferred = installer.remove_old_versions(  # type: ignore[attr-defined]
+        versions, current, install_root, platform_name="nt"
+    )
+    assert removed == [stale.name]
+    assert deferred == []
+    assert not stale.exists()
+
+
+def test_deferred_windows_cleanup_accepts_same_version_swap_backup(tmp_path: Path) -> None:
+    installer = _load_installer()
+    install_root = tmp_path / "app"
+    versions = install_root / "versions"
+    current = versions / "v1.1.6"
+    backup = versions / ".v1.1.6.old-0123456789abcdef0123456789abcdef"
+    current.mkdir(parents=True)
+    backup.mkdir()
+    (backup / "locked-old-python.exe").write_bytes(b"old")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            installer._DEFERRED_WINDOWS_CLEANUP,  # type: ignore[attr-defined]
+            str(install_root),
+            current.name,
+            backup.name,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert current.is_dir()
+    assert not backup.exists()
+
+    with pytest.raises(installer.InstallError):  # type: ignore[attr-defined]
+        installer.schedule_deferred_version_cleanup(  # type: ignore[attr-defined]
+            install_root,
+            current,
+            [".v1.1.6.old-NOTSAFE"],
+            platform_name="nt",
+        )
+
+
 def test_deferred_cleanup_schedule_uses_new_version_python(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

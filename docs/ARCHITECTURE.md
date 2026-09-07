@@ -9,12 +9,21 @@ output.
 
 Core does not execute arbitrary candidate instructions. The host Agent performs
 reasoning and implementation through an `AgentAdapter`; v1 provides a Codex environment
-adapter. Discovery and acquisition are protocol boundaries so future Agent adapters
-can reuse state and policy without changing schemas.
+adapter. Discovery, acquisition, and workspace mutation are protocol boundaries so future
+Agent adapters can reuse state and policy without changing the deterministic state machine.
+
+Workspace mutation now has two transports. `DirectFilesystemWriter` preserves the existing
+CLI-owned atomic write path for normal Codex/CLI operation. `HostPlanWorkspaceWriter` is used only
+when a host prohibits shell-side project mutation but provides a native file API. In that mode Core
+simulates the same mutation semantics in memory, emits an HMAC-authenticated write plan outside the
+project, and requires the host to apply canonical contained targets through its own write/edit API.
+Each operation carries an expected preimage and required postimage SHA-256. A separate
+`host-write ack` verifies the actual postimages before clearing the pending plan; no later project
+mutation is accepted while a plan remains pending.
 
 Project decisions live in `.stackmarshal/project/`; ephemeral runs live in
-`.stackmarshal/runs/<run-id>/`. The shared integrity signing key lives in the user's external
-StackMarshal state directory, never in the repository. Canonical `run.json` and `task-graph.json`
+`.stackmarshal/runs/<run-id>/`. The shared integrity signing key and pending host-write plans/receipts
+live in the user's external StackMarshal state directory, never in the repository. Canonical `run.json` and `task-graph.json`
 are authenticated before they are accepted as execution/completion authority. Events are
 append-only JSONL. Architecture is frozen before task execution, and a post-freeze architecture or
 task-plan change requires a decision record. Verification-only fixes use a separate bounded

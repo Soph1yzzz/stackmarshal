@@ -15,6 +15,8 @@ from .integrity import (
 )
 from .models import RunState
 from .state import project_info, worktree_fingerprint
+from .workspace_io import mkdir as workspace_mkdir
+from .workspace_io import write_text as workspace_write_text
 
 
 def checkpoint_key_path() -> Path:
@@ -33,7 +35,7 @@ def create_checkpoint(
     files_changed: list[str] | None = None,
     tests_run: list[dict[str, Any]] | None = None,
 ) -> tuple[Path, Path]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    workspace_mkdir(output_dir, parents=True, exist_ok=True)
     completed_items = completed or state.completed_phases
     do_not_repeat_items = do_not_repeat or []
     project_root = Path(state.project.root)
@@ -65,8 +67,10 @@ def create_checkpoint(
     )
     json_path = output_dir / "checkpoint.json"
     markdown_path = output_dir / "checkpoint.md"
-    json_path.write_text(
-        json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    workspace_write_text(
+        json_path,
+        json.dumps(metadata, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
     )
     markdown = f"""# StackMarshal Checkpoint
 
@@ -100,7 +104,7 @@ def create_checkpoint(
 stackmarshal resume {state.run_id}
 ```
 """
-    markdown_path.write_text(markdown, encoding="utf-8")
+    workspace_write_text(markdown_path, markdown, encoding="utf-8")
     return json_path, markdown_path
 
 

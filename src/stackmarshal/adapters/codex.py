@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from typing import Any
 
+from ..workspace_io import write_text as workspace_write_text
+
 
 class CodexAdapter:
     """Read-only environment discovery for Codex v1.
@@ -66,9 +68,12 @@ class CodexAdapter:
         return bool(result.stdout.strip())
 
     def write_audit(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "environment": self.detect_environment(),
             "native_capabilities": self.list_native_capabilities(),
         }
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        workspace_write_text(
+            path,
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )

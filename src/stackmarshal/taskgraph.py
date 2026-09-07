@@ -6,6 +6,7 @@ from typing import Any, cast
 
 from .constants import STATE_DIR
 from .integrity import ensure_signing_key_outside, sign_record, verify_record
+from .workspace_io import write_text as workspace_write_text
 
 TASK_STATUSES = {"pending", "in_progress", "done", "blocked"}
 
@@ -61,11 +62,13 @@ def save_task_graph(root: Path, graph: dict[str, Any]) -> None:
     ensure_signing_key_outside(root)
     signed = sign_record(graph)
     path = task_graph_path(root)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(signed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    temporary.replace(path)
-    task_graph_markdown_path(root).write_text(render_markdown(graph), encoding="utf-8")
+    workspace_write_text(
+        path,
+        json.dumps(signed, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+        atomic=True,
+    )
+    workspace_write_text(task_graph_markdown_path(root), render_markdown(graph), encoding="utf-8")
 
 
 def add_task(

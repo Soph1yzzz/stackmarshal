@@ -149,6 +149,19 @@ The helper refuses the current version, validates containment under the managed 
 and does not convert unrelated cleanup failures into success. Release acceptance requires a real
 Windows managed pin update demonstrating that the old managed version directory disappears.
 
+## v1.2.0 repair-cleanup addendum
+
+A real `stackmarshal repair --remove-shadowed` dogfood on Windows removed the unmanaged Python
+Scripts launcher as intended, but exposed a second cleanup shape: same-version repair temporarily
+moves the active managed version to `.vMAJOR.MINOR.PATCH.old-<uuid>`. The still-running CLI can keep
+that backup's `python.exe` locked after the atomic swap succeeds.
+
+v1.2.0 extends the existing deferred Windows cleanup contract to these installer-created stale swap
+backups as well as older `vMAJOR.MINOR.PATCH` directories. Targets must match the installer's exact
+hidden-backup grammar, remain contained under the managed `versions/` root, and are removed only by
+the newly installed/current managed Python after the originating CLI exits. Unknown hidden entries
+are not swept. This closes the repair residue without weakening rollback or arbitrary-path controls.
+
 ## Residual limitations
 
 - The one-time first bootstrap script is trusted through HTTPS delivery from the GitHub Release.

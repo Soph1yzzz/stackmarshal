@@ -29,4 +29,4 @@ The final release must also demonstrate a real managed Windows `stackmarshal pin
 
 ## Scope discipline
 
-No state-machine, resume, migration, task, verification, or pin-resolution semantics change in this release. The operator UX / fully non-invasive initialization work previously planned for v1.1.6 moves unchanged to v1.1.7.
+No state-machine, resume, migration, task, verification, or pin-resolution semantics change in this release. The operator UX / fully non-invasive initialization work previously planned for v1.1.6 moved unchanged to v1.1.7 at release time; the later v1.2.0 host-write transport release now places that still-unimplemented scope at v1.2.1.

@@ -1,6 +1,6 @@
 # Future Work
 
-Items intentionally outside the v1.1.6 Windows self-update cleanup hotfix scope:
+Items intentionally outside the v1.2.0 host-write transport scope:
 
 - Claude Code, Gemini CLI, Cline, GitHub Copilot, and OpenHands adapters.
 - Multi-agent research/build/review orchestration.
@@ -33,13 +33,20 @@ The next intended sequencing is:
   - defer only Windows file-lock cleanup failures from the updating CLI's old version directory,
   - use the newly installed version's Python to retry cleanup after the old CLI exits,
   - preserve fail-closed behavior for non-lock cleanup errors and unsafe paths.
-- **v1.1.7 — Operator UX / fully non-invasive operation**
+- **v1.2.0 — Host-write transport / adapter foundation**
+  - preserve the existing direct-filesystem path for normal Codex/CLI operation,
+  - add an HMAC-authenticated host-write plan/check/ack boundary for hosts that prohibit shell-side project mutation,
+  - bind each mutation to canonical contained paths plus expected preimage and required postimage SHA-256 values,
+  - serialize project mutations while a host-write plan is pending,
+  - extend Windows installer cleanup to stale same-version swap backups exposed by repair dogfood.
+- **v1.2.1 — Operator UX / fully non-invasive operation**
   - repository-external/local initialization mode beyond the v1.1.5 existing-ignore optimization,
   - separate environment inventory from delivery-quality audit,
-  - compact human CLI output with explicit full JSON mode.
-- **v1.2.0 — Adapter framework + Claude Code adapter**
-- **v1.2.1 — Gemini CLI adapter**
-- **v1.2.2 — Adapter conformance polish**
+  - compact human CLI output with explicit full JSON mode,
+  - make actionable shadowed-launcher cleanup guidance visible directly in doctor output.
+- **v1.2.2 — Claude Code adapter**
+- **v1.2.3 — Gemini CLI adapter**
+- **v1.2.4 — Adapter conformance polish**
 - **v1.3.0 — Multi-agent orchestration**
 - **v1.4.0 — Signed provenance**
 - **v2.0.0 — schema/migrations-class changes**

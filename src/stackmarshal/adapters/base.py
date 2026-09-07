@@ -20,6 +20,16 @@ class AcquisitionAdapter(Protocol):
     def rollback(self, receipt: dict[str, Any]) -> None: ...
 
 
+class HostWriteAdapter(Protocol):
+    """Host-side transport for StackMarshal-signed project mutations.
+
+    Core decides the mutation contents and integrity contract. The host adapter only
+    applies those mutations with the host's native file API and returns evidence.
+    """
+
+    def apply_write_plan(self, plan: dict[str, Any]) -> dict[str, Any]: ...
+
+
 class AgentAdapter(Protocol):
     def detect_environment(self) -> dict[str, Any]: ...
 

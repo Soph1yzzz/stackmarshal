@@ -2,6 +2,24 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
+## [1.2.0] - 2026-09-07
+
+### Added
+
+- Add dual workspace-mutation transports: the existing direct filesystem writer for ordinary Codex/CLI use and a new host-write plan transport for hosts such as DevSpace that prohibit shell-side project mutation.
+- Add HMAC-authenticated host-write plans with canonical contained paths, expected preimage SHA-256, required postimage SHA-256, serialized pending mutation, and explicit `host-write status/check/ack/abort` controls.
+- Add `--write-mode host` for project-mutating CLI commands so the Core can compute state/evidence changes without writing the project directly.
+- Add a host-write plan JSON Schema and end-to-end/adversarial coverage through finalization.
+
+### Fixed
+
+- Extend Windows deferred cleanup to installer-created same-version `.vMAJOR.MINOR.PATCH.old-<uuid>` swap backups exposed by real `repair --remove-shadowed` dogfood.
+- Isolate direct filesystem semantics from host-mediated transport so ordinary Codex/CLI behavior remains unchanged.
+
+### Changed
+
+- Move the previously planned operator UX / fully non-invasive state-placement work to v1.2.1, Claude Code adapter work to v1.2.2, Gemini CLI to v1.2.3, and adapter conformance polish to v1.2.4.
+
 ## [1.1.6] - 2026-09-04
 
 ### Fixed

@@ -49,7 +49,7 @@ The CLI now reconfigures stdout/stderr to UTF-8 when the host stream supports it
 
 ## Less invasive init
 
-`stackmarshal init` now asks Git whether `.stackmarshal/runs/` is already ignored before editing the project `.gitignore`. Existing `.git/info/exclude`, global exclude, or project ignore coverage prevents redundant repository mutation. Full repository-external/non-invasive state placement was later moved to v1.1.7 after the v1.1.6 Windows cleanup hotfix.
+`stackmarshal init` now asks Git whether `.stackmarshal/runs/` is already ignored before editing the project `.gitignore`. Existing `.git/info/exclude`, global exclude, or project ignore coverage prevents redundant repository mutation. Full repository-external/non-invasive state placement was later moved to v1.1.7 after the v1.1.6 Windows cleanup hotfix, and now sits at v1.2.1 after v1.2.0 prioritized the host-write transport boundary.
 
 ## Shadowed launcher repair
 
@@ -72,4 +72,4 @@ The immutable release smoke still exercises the platform bootstrap normally. If 
 
 ## Scope discipline
 
-The previously planned delivery-quality audit and compact human output remain useful; after the v1.1.6 Windows cleanup hotfix they move unchanged to v1.1.7. This release stays focused on issues directly demonstrated by field use: truthful stopping, truthful recovery, state compatibility, bounded correction, and operator-facing evidence correctness.
+The previously planned delivery-quality audit and compact human output remain useful; after the v1.1.6 Windows cleanup hotfix they moved unchanged to v1.1.7, and now sit at v1.2.1 after the v1.2.0 host-write transport release. This release stays focused on issues directly demonstrated by field use: truthful stopping, truthful recovery, state compatibility, bounded correction, and operator-facing evidence correctness.

@@ -149,6 +149,36 @@ cleanup-path patch around an already verified installer rather than a new update
 maintainer records focused review + adversarial regressions + CI/CodeQL instead of a full repository
 security scan.
 
+## v1.2.0 focused host-write transport review
+
+v1.2.0 introduces a new project-mutation trust boundary for hosts such as DevSpace that prohibit
+shell-side project writes but expose a native file write/edit API. The existing direct filesystem
+path remains the default and keeps its prior atomic-write semantics. Host mode never grants the host
+phase or completion authority; Core computes the mutation, signs a plan outside the project, and
+accepts later progress only after the requested project postimages are verified.
+
+The focused review treats the host as a fallible transport rather than trusted StackMarshal
+authority. A host-write plan is HMAC-authenticated with the same user-local key boundary as live
+state, binds the exact workspace identity, permits only canonical relative project paths, rejects
+symlink/junction escapes, serializes later mutations while one plan is pending, and records both the
+expected preimage and required postimage SHA-256 for every write. `host-write check` fails when the
+workspace changed before application; `host-write ack` fails when the host wrote the wrong bytes or
+target. Tampered plan records, duplicate targets, unsupported operations, malformed hash contracts,
+and wrong plan IDs fail closed. `migrate`, managed `pin`, and managed `repair` are deliberately not
+project host-write operations.
+
+`tests/test_host_write_adapter.py` covers direct-mode non-regression, host-mode no-direct-write
+behavior, plan HMAC tampering, traversal/non-canonical targets, preimage races, wrong postimages,
+pending-plan serialization, abort/check/ack error paths, and a host-mediated lifecycle through
+finalization. Installer regressions additionally cover stale same-version swap-backup cleanup exposed
+by the real v1.1.6 shadowed-launcher repair dogfood.
+
+This change triggers the repository policy's architectural/security-boundary discussion. The
+maintainer decision for v1.2.0 is to **skip a separate full Codex Security repository scan** and use
+the source-backed boundary review above, dedicated adversarial host-write tests, the full automated
+quality gate, public multi-OS CI, and CodeQL as compensating evidence. A known unresolved material
+finding still blocks release.
+
 ## Scope limitation
 
 The application threat model excludes kernel compromise and malware already executing as the

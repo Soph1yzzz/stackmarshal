@@ -10,6 +10,8 @@
 - [x] architecture-freeze and bounded-replan policy
 - [x] formal stop states with checkpoint generation
 - [x] repository-lineage identity, Git HEAD, dirty-state, exact Git/non-Git worktree fingerprint, signed resume phase, and user-local HMAC checks on same-run resume
+- [x] direct filesystem mutation remains the default; host-write mode emits signed canonical mutation plans and requires pre/postimage verification before ack
+- [x] pending host-write plans serialize later project mutation and cannot grant phase/completion authority
 - [x] bounded VERIFICATION/CORRECTION/VERIFICATION lane that does not consume architecture-replan budget
 - [x] legacy unsigned state is archived with hashes without being promoted into signed authority
 
@@ -28,6 +30,7 @@
 - [x] install, update, same-version repair, CLI-only, Skill-only, no-PATH, and explicit downgrade modes
 - [x] post-install doctor and ignored isolated installation audit
 - [x] explicit managed repair plus high-confidence-only optional shadowed-launcher removal
+- [x] Windows deferred cleanup covers both old managed version directories and installer-created same-version swap backups
 - [x] Windows self-update old-version cleanup defers only lock errors and retries from the newly installed venv after updater exit
 
 ## Quality
@@ -48,7 +51,7 @@
 ## Security and release contract
 
 - [x] Threat model, installation audit, and SECURITY.md
-- [x] adversarial prompt/supply-chain/installer cases, resume/migration integrity regressions, and fail-closed approval
+- [x] adversarial prompt/supply-chain/installer cases, resume/migration integrity regressions, signed host-write path/hash/tamper/race regressions, and fail-closed approval
 - [x] zero required runtime dependencies
 - [x] deterministic source, Skill, bootstrap, and Python package artifacts
 - [x] portable SHA256SUMS, SBOM, provenance, and release manifest

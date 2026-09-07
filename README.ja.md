@@ -118,7 +118,8 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 installerは専用virtual environmentへCLIを隔離導入し、対応するCodex Skillを配置し、versioned
 Release assetsを検証してpost-install doctorまで実行します。初回bootstrap後はv1.1.4から
 `stackmarshal pin latest`を通常updateに使えます。v1.1.5では同一runの実resume、legacy state archival、
-bounded verification correctionを追加しました。`stackmarshal version`でruntime / pin / Skill /
+bounded verification correctionを追加し、v1.2.0では通常のdirect writeを維持したまま、DevSpace等の
+shell-write禁止host向けにsigned HostWriteAdapterを追加しました。`stackmarshal version`でruntime / pin / Skill /
 launcherのdriftもすぐ確認できます。詳細な導入、Security、CLI、state、release、development
 contractは以下の既存説明を維持しています。
 
@@ -153,7 +154,7 @@ Coding Agentは、調査前に実装を始める、既存OSSを再実装する�
 - **Checkpoint / Resume**：同じユーザー領域HMACのintegrity境界でcheckpointとacquisition receiptも保護し、`stackmarshal resume <run-id>`はproject identity、Git state、exact worktree fingerprint、signed resume phaseを検証したresumable stopだけを同一run IDで再開します。
 - **Bounded Correction**：軽微なverification修正は`VERIFICATION -> CORRECTION -> VERIFICATION`で処理し、architecture replan budgetを消費しません。
 - **Legacy evidenceを権威へ昇格しない**：`stackmarshal migrate`は旧unsigned stateをhash付きarchiveへ退避し、勝手に署名してcurrent authorityへ昇格しません。
-- **Agent非依存Core**：v1はCodex Adapter、将来は他Agent Adapterへ拡張可能です。
+- **Agent非依存Core**：通常のCodex/CLIは従来どおりdirect filesystem transportを使い、shellからprojectを書けないDevSpace等のhostだけHMAC署名済みHostWriteAdapterへ切り替えられます。Coreのstate/phase authorityはどちらでも同一です。
 
 ## 起動方法
 
@@ -204,7 +205,7 @@ stackmarshal version
 再現性のためexact releaseへ固定する場合：
 
 ```bash
-stackmarshal pin 1.1.6
+stackmarshal pin 1.2.0
 ```
 
 `stackmarshal version`は人間向け確認で、実行中CLI、managed pin、installed Skill、resolved launcher、
@@ -225,7 +226,7 @@ restart-pending markerを残します。再起動前の古いSkillはStackMarsha
 Skillだけを手動導入する場合も、`main`ではなく対応するRelease tagへ固定します。
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.6/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.0/skills/stackmarshal
 ```
 
 ## CLI例
@@ -240,7 +241,7 @@ stackmarshal migrate --dry-run
 stackmarshal invocation "StackMarshalを使って実装して"
 stackmarshal start --mode build --budget standard \
   --invocation "StackMarshalを使って実装して"
-stackmarshal doctor --host-skill-version 1.1.6
+stackmarshal doctor --host-skill-version 1.2.0
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -260,7 +261,24 @@ stackmarshal lock verify .stackmarshal/project/locks/dependencies.lock.json
 stackmarshal checkpoint create --next-action "外部ブロッカーを解消する"
 stackmarshal resume <run-id> --reason "blocker resolved"
 stackmarshal resume inspect --run-id <run-id>
+stackmarshal host-write status
+stackmarshal host-write check --plan-id <plan-id>
+stackmarshal host-write ack --plan-id <plan-id>
 ```
+
+### Shellからprojectを書けないHost
+
+通常のCodex/CLIでは何も変更せず、従来どおりStackMarshal自身が`.stackmarshal/`をatomic writeします。
+DevSpaceのようにshell経由のproject mutationを禁止し、代わりにnative `write/edit` APIを持つhostでは、
+project-mutating commandへ`--write-mode host`を付けます。Coreはprojectを書かず、ユーザー領域に
+HMAC署名済みwrite-planを作成してJSONとして返します。
+
+各operationにはcanonical relative path、expected preimageとそのSHA-256、要求するpostimageと
+そのSHA-256が入り、必要な親directoryは`required_directories`に列挙されます（hostのwrite primitiveが
+親directoryを暗黙作成する場合はそれで満たせます）。hostはまず`host-write check`を通し、planのcontentを
+native file APIで適用し、その後`host-write ack`を実行します。ackは実際のpostimage hashを再検証します。pending
+planが残っている間は次のproject mutationを拒否するため、host transportがStackMarshalのphase/
+completion authorityを持つことはありません。
 
 機械出力はJSONです。明示的checkpoint作成が成功した場合はexit 0でterminal statusと成功を返します。
 formal stop commandは引き続きbudget、approval、unsafe、external blockedを非zero exit codeで区別します。

@@ -24,6 +24,7 @@ import zipfile
 
 MIN_PYTHON = (3, 11)
 VERSION_RE = re.compile(r"^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+SWAP_BACKUP_RE = re.compile(r"^\.v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.old-[0-9a-f]{32}$")
 CHECKSUM_RE = re.compile(r"^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._+-]*)$")
 MANAGED_PROFILE_START = "# >>> stackmarshal >>>"
 MANAGED_PROFILE_END = "# <<< stackmarshal <<<"
@@ -815,7 +816,9 @@ def remove_old_versions(
     if not versions_root.exists():
         return removed, deferred
     for child in versions_root.iterdir():
-        if child == current or not VERSION_RE.fullmatch(child.name):
+        if child == current:
+            continue
+        if not (VERSION_RE.fullmatch(child.name) or SWAP_BACKUP_RE.fullmatch(child.name)):
             continue
         try:
             safe_remove(child, install_root)
@@ -840,10 +843,11 @@ versions = (root / "versions").resolve()
 current = sys.argv[2]
 pending = list(sys.argv[3:])
 version_re = re.compile(r"^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$")
+backup_re = re.compile(r"^\.v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.old-[0-9a-f]{32}$")
 if not versions.is_dir() or current in pending:
     raise SystemExit(2)
 for name in pending:
-    if not version_re.fullmatch(name):
+    if not (version_re.fullmatch(name) or backup_re.fullmatch(name)):
         raise SystemExit(2)
 for _ in range(80):
     remaining = []
@@ -878,7 +882,9 @@ def schedule_deferred_version_cleanup(
     if platform_name != "nt" or not deferred:
         return False
     for name in deferred:
-        if not VERSION_RE.fullmatch(name) or name == current.name:
+        safe_version = VERSION_RE.fullmatch(name) and name != current.name
+        safe_backup = SWAP_BACKUP_RE.fullmatch(name) is not None
+        if not (safe_version or safe_backup):
             raise InstallError(f"Unsafe deferred version cleanup target: {name!r}")
     python = venv_python(current / "venv")
     creationflags = 0
@@ -1122,21 +1128,31 @@ def main(argv: list[str] | None = None) -> int:
             raise
         else:
             cleanup_warnings: list[str] = []
+            deferred_versions: list[str] = []
             for swap in (skill_swap, cli_swap):
                 if swap is None:
                     continue
                 try:
                     swap.finalize()
                 except Exception as cleanup_error:
-                    cleanup_warnings.append(str(cleanup_error))
+                    if (
+                        swap is cli_swap
+                        and swap.backup is not None
+                        and swap.backup.parent == install_root / "versions"
+                        and _windows_lock_error(cleanup_error)
+                    ):
+                        deferred_versions.append(swap.backup.name)
+                    else:
+                        cleanup_warnings.append(str(cleanup_error))
             if not args.skill_only:
-                deferred_versions: list[str] = []
                 try:
-                    _, deferred_versions = remove_old_versions(
+                    _, locked_versions = remove_old_versions(
                         install_root / "versions", version_dir, install_root
                     )
+                    deferred_versions.extend(locked_versions)
                 except Exception as cleanup_error:
                     cleanup_warnings.append(str(cleanup_error))
+                deferred_versions = list(dict.fromkeys(deferred_versions))
                 if deferred_versions:
                     try:
                         scheduled = schedule_deferred_version_cleanup(
@@ -1149,7 +1165,7 @@ def main(argv: list[str] | None = None) -> int:
                     else:
                         if scheduled:
                             cleanup_warnings.append(
-                                "Deferred Windows cleanup scheduled for locked old versions: "
+                                "Deferred Windows cleanup scheduled for locked managed directories: "
                                 + ", ".join(deferred_versions)
                             )
                 try:

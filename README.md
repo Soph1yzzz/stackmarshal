@@ -124,8 +124,9 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 The installer uses a dedicated virtual environment, installs the matching Codex Skill, verifies
 versioned Release assets, and runs a post-install doctor check. After that first bootstrap, v1.1.4
 made `stackmarshal pin latest` the normal update command; v1.1.5 adds real same-run checkpoint resume,
-legacy-state archival, and bounded verification correction. `stackmarshal version` remains the quick
-runtime/pin/Skill/launcher drift check. The detailed installation, security, CLI, state, release,
+legacy-state archival, and bounded verification correction. v1.2.0 adds a signed HostWriteAdapter
+path for MCP/agent hosts that forbid shell-based project mutation while preserving direct writes as
+the default. `stackmarshal version` remains the quick runtime/pin/Skill/launcher drift check. The detailed installation, security, CLI, state, release,
 and development contracts remain below.
 
 ## Detailed overview
@@ -161,7 +162,8 @@ StackMarshal makes those failure modes explicit and bounded.
 - **Checkpoint/resume.** The same user-local HMAC integrity boundary protects checkpoints and acquisition receipts; `stackmarshal resume <run-id>` reopens only explicitly resumable stops after validating project identity, Git state, exact worktree fingerprint, and the signed resume phase.
 - **Bounded correction.** Small verification fixes use `VERIFICATION -> CORRECTION -> VERIFICATION` without spending the architecture-replan budget.
 - **Legacy evidence without trust promotion.** `stackmarshal migrate` archives old unsigned state with hashes instead of silently signing it into current authority.
-- **Agent-neutral Core.** v1 ships a Codex adapter; future adapters can reuse the state and policy model.
+- **Host-safe write transport.** Direct filesystem writes remain the default; shell-write-restricted hosts can request HMAC-signed, preimage-bound mutation plans and apply them through a native host file API before Core acknowledges the postimages.
+- **Agent-neutral Core.** The state/policy model is transport-neutral; Codex uses direct writes normally while MCP hosts such as DevSpace can use the HostWriteAdapter path without weakening acceptance or completion gates.
 
 ## Invocation
 
@@ -212,7 +214,7 @@ stackmarshal version
 Pin an exact release when reproducibility matters:
 
 ```bash
-stackmarshal pin 1.1.6
+stackmarshal pin 1.2.0
 ```
 
 `stackmarshal version` is the human check: it reports the running CLI, exact managed pin,
@@ -236,7 +238,7 @@ after restart before work can begin.
 For a Skill-only manual installation, use the matching release tag:
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.1.6/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.0/skills/stackmarshal
 ```
 
 ## Quick CLI tour
@@ -251,7 +253,7 @@ stackmarshal migrate --dry-run
 stackmarshal invocation "Use StackMarshal to build this"
 stackmarshal start --mode build --budget standard \
   --invocation "Use StackMarshal to build this"
-stackmarshal doctor --host-skill-version 1.1.6
+stackmarshal doctor --host-skill-version 1.2.0
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -271,12 +273,53 @@ stackmarshal lock verify .stackmarshal/project/locks/dependencies.lock.json
 stackmarshal checkpoint create --next-action "Resolve the external blocker"
 stackmarshal resume <run-id> --reason "blocker resolved"
 stackmarshal resume inspect --run-id <run-id>
+stackmarshal --write-mode host init
+stackmarshal host-write status
+stackmarshal host-write check --plan-id <plan-id>
+stackmarshal host-write ack --plan-id <plan-id>
 stackmarshal validate .stackmarshal/runs/<run-id>/run.json --kind run-state
 ```
 
 Machine-readable output is JSON. Successful explicit checkpoint creation exits 0 and reports the
 terminal checkpoint status; formal stop commands still use distinct non-zero codes for budget,
 approval, unsafe dependency, and external-block conditions.
+
+### Shell-write-restricted hosts
+
+Normal Codex/CLI use does **not** change: mutating commands write `.stackmarshal` directly and keep
+the existing atomic-write/append behavior. When a host contract forbids shell commands from writing
+project files but exposes its own file write/edit API, run the same mutating command with
+`--write-mode host` instead.
+
+The command then performs all normal StackMarshal reasoning and validation but leaves the project
+untouched. It returns an HMAC-signed plan containing canonical project-relative paths, exact expected
+preimages (and SHA-256 hashes), final UTF-8 content hashes, and the original command result. Only one
+plan may be pending for a workspace.
+
+```text
+stackmarshal --write-mode host <normal mutating command...>
+        ↓
+stackmarshal host-write check --plan-id <id>
+        ↓
+host native write/edit API applies the signed operations
+        ↓
+stackmarshal host-write ack --plan-id <id>
+        ↓
+next StackMarshal mutation
+```
+
+A host adapter should honor the plan's `required_directories` (or rely on a host write primitive that
+creates parent directories implicitly). For existing files, it should use its exact edit/replace
+primitive with `expected_preimage` as a compare-and-swap guard. For absent files it should confirm
+absence and use the host create/write primitive. `ack` independently hashes every postimage and does not clear the
+pending plan unless all outputs match. Plan/receipt authority lives in the same user-local HMAC
+boundary as StackMarshal state but outside the project. `host-write abort` is available only for an
+intentionally abandoned unapplied plan.
+
+This is a transport split, not a second state machine: budgets, task evidence, checkpoint/resume,
+verification freshness, finalization, and `COMPLETE` semantics are identical in direct and host
+modes. v1.2.0 does not host-plan legacy `migrate`; managed-install `pin`/`repair` also remain outside
+the project HostWriteAdapter.
 
 ## Workflow
 
@@ -387,7 +430,7 @@ behavior is a v1 release requirement.
 `python scripts/build_release.py` resolves the current version from `pyproject.toml` and produces:
 
 - `install.ps1`, `install.sh`, and the shared verified `installer.py`
-- `stackmarshal-skill-v1.1.6.zip`
+- `stackmarshal-skill-v1.2.0.zip`
 - Python wheel and source distribution
 - source archive
 - `SHA256SUMS`

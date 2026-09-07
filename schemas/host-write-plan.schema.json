@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackmarshal.dev/schemas/host-write-plan.schema.json",
+  "title": "StackMarshal Host Write Plan",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "record_type",
+    "plan_id",
+    "created_at",
+    "project_root",
+    "project_identity",
+    "command",
+    "command_exit_code",
+    "command_result",
+    "required_directories",
+    "operations",
+    "integrity_algorithm",
+    "integrity_key_id",
+    "integrity_hmac_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "record_type": {"const": "host_write_plan"},
+    "plan_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "created_at": {"type": "string"},
+    "project_root": {"type": "string", "minLength": 1},
+    "project_identity": {"type": ["string", "null"]},
+    "command": {"type": "array", "items": {"type": "string"}},
+    "command_exit_code": {"type": "integer"},
+    "command_result": {},
+    "required_directories": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "operation",
+          "path",
+          "expected_preimage_sha256",
+          "expected_preimage",
+          "content_sha256",
+          "content"
+        ],
+        "properties": {
+          "operation": {"const": "write_text"},
+          "path": {"type": "string", "minLength": 1, "pattern": "^[^\\\\:]+$"},
+          "expected_preimage_sha256": {
+            "type": ["string", "null"],
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "expected_preimage": {"type": ["string", "null"]},
+          "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "content": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "integrity_algorithm": {"const": "hmac-sha256-v1"},
+    "integrity_key_id": {"type": "string", "pattern": "^[a-f0-9]{16}$"},
+    "integrity_hmac_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  },
+  "additionalProperties": false
+}
