@@ -23,9 +23,14 @@ class AcquisitionAdapter(Protocol):
 class HostWriteAdapter(Protocol):
     """Host-side transport for StackMarshal-signed project mutations.
 
-    Core decides the mutation contents and integrity contract. The host adapter only
-    applies those mutations with the host's native file API and returns evidence.
+    Core owns state transitions and the signed pre/postimage contract. A host adapter
+    may batch native writes, but it must not weaken CAS checks or acknowledge a plan
+    until the final postimages match Core's signed hashes.
     """
+
+    supports_atomic_multi_file: bool
+    supports_full_preimage_cas: bool
+    supports_append_cas: bool
 
     def apply_write_plan(self, plan: dict[str, Any]) -> dict[str, Any]: ...
 

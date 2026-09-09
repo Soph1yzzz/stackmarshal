@@ -179,6 +179,44 @@ the source-backed boundary review above, dedicated adversarial host-write tests,
 quality gate, public multi-OS CI, and CodeQL as compensating evidence. A known unresolved material
 finding still blocks release.
 
+## v1.2.1 focused HostWrite transaction/relocation review
+
+v1.2.1 keeps the v1.2.0 host-as-fallible-transport model but expands the boundary in three places:
+transaction admission, compact append/recovery storage, and signed workspace relocation. The review
+therefore treats an unacknowledged plan, its user-local recovery blob, and a relocation permit as
+security-relevant authority rather than convenience metadata.
+
+The pending-plan invariant is now enforced before every project-mutating command regardless of
+selected write transport. The single pending record is created with `O_CREAT|O_EXCL` semantics so a
+second process cannot replace the transaction after a non-atomic check. Dedicated regression coverage
+applies a signed plan to project files, deliberately leaves it unacknowledged, and proves that both a
+second host mutation and an accidental direct mutation fail before the pending record changes.
+
+`append_text` reduces payload size without weakening the postimage contract. The signed plan binds the
+whole-file preimage SHA-256 and byte size, at most 512 characters of expected tail, the append delta
+and its SHA-256, and the required whole-file postimage SHA-256. The previous full preimage is stored as
+a content-addressed user-local recovery blob and is re-hashed before recovery output. `host-write
+recover` never writes the project itself. Tests cover compact-plan shape, accidental project mutation,
+preimage rejection, exact recovery, and final ACK of the restored/applied plan.
+
+Workspace relocation is fail-closed by default. `relocate prepare` creates an HMAC-authenticated
+pre-move permit outside the repository. `relocate accept` requires the exact destination root, source
+run/identity, terminal deliverable fingerprint, portable repository identity, Git HEAD, and dirty
+state. Existing signed checkpoints are re-verified against their worktree fingerprint and migrated
+under the same proof, so relocation does not break later resume. Repository bootstrap remains a
+separate signed migration event. Tests cover successful relocation, HostWrite-mediated acceptance,
+checkpoint/resume after relocation, later Git bootstrap separation, and content-change rejection.
+
+The Windows Git Bash shim introduces no second installation authority: it resolves the same managed
+version directory as `stackmarshal.cmd`, is installed atomically in the same managed `bin` directory,
+and is rolled back with the authoritative launcher. Doctor groups co-located aliases as one launcher
+family while retaining warnings for launchers in distinct PATH directories.
+
+This release again uses a focused source-backed boundary review, dedicated adversarial/regression
+tests, the full automated quality gate, public multi-OS CI, and CodeQL. A separate full Codex Security
+repository scan is **not claimed** for v1.2.1; if later review finds a material unresolved boundary
+issue, release remains blocked until it is resolved or explicitly scoped with equivalent evidence.
+
 ## Scope limitation
 
 The application threat model excludes kernel compromise and malware already executing as the

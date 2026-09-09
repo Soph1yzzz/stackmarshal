@@ -81,17 +81,17 @@ The fingerprint remains fail-closed. StackMarshal does not silently exclude a re
 
 `stackmarshal init` currently adds StackMarshal run-state patterns to the project `.gitignore`. This is deliberate today, but field use showed a valid operator preference for keeping orchestrator bookkeeping from dirtying the target repository.
 
-This was originally deferred to v1.1.4 and then v1.1.5 after the pin/version scope decision. v1.1.5 now fixes the demonstrated redundant-mutation case by respecting existing Git ignore coverage; the remaining fully local/repository-external initialization work moved to v1.1.6 at that point. The later v1.1.6 cleanup hotfix and v1.2.0 host-write transport release shifted that still-unimplemented operator-UX scope to v1.2.1.
+This was originally deferred to v1.1.4 and then v1.1.5 after the pin/version scope decision. v1.1.5 fixed the demonstrated redundant-mutation case by respecting existing Git ignore coverage; the remaining fully local/repository-external initialization work moved to v1.1.6 at that point. The later v1.1.6 cleanup hotfix and v1.2.0 host-write transport release shifted that still-unimplemented operator-UX scope to v1.2.1. ChromeBridge HostWrite dogfood then exposed higher-priority transaction/transport issues that took the v1.2.1 slot, so this operator-UX work is now planned for v1.2.2.
 
 ### 5. `audit` is an environment inventory, not a delivery audit
 
 The current `stackmarshal audit` writes environment and native-capability inventory. The field report expected a final cross-check of changed files, task acceptance/evidence, verification freshness, unresolved failures, and finalize readiness.
 
-That broader delivery review was originally deferred to v1.1.4 and then v1.1.5. Higher-priority recovery defects exposed by later dogfood occupied v1.1.5, so the delivery review moved unchanged to v1.1.6 at that point. It now sits at v1.2.1 after the v1.1.6 cleanup hotfix and v1.2.0 host-write transport release. The existing environment audit remains useful and should be named/scoped more explicitly rather than overloaded silently.
+That broader delivery review was originally deferred to v1.1.4 and then v1.1.5. Higher-priority recovery defects exposed by later dogfood occupied v1.1.5, so the delivery review moved unchanged to v1.1.6 at that point. It later moved to v1.2.1 after the v1.1.6 cleanup hotfix and v1.2.0 host-write transport release; ChromeBridge HostWrite dogfood then took the v1.2.1 slot, moving this work unchanged to v1.2.2. The existing environment audit remains useful and should be named/scoped more explicitly rather than overloaded silently.
 
 ### 6. Human CLI output is verbose
 
-Phase transitions currently print the full run JSON. This is strong machine output but noisy for interactive terminal operation. A compact human default with explicit full JSON output was originally deferred to v1.1.4, then v1.1.5, then v1.1.6 after recovery correctness took the v1.1.5 slot. It remains unchanged and is now planned for v1.2.1.
+Phase transitions currently print the full run JSON. This is strong machine output but noisy for interactive terminal operation. A compact human default with explicit full JSON output was originally deferred to v1.1.4, then v1.1.5, then v1.1.6 after recovery correctness took the v1.1.5 slot. It later moved to v1.2.1 and is now planned for v1.2.2 after ChromeBridge HostWrite dogfood took the v1.2.1 slot.
 
 ## v1.1.3 response
 
@@ -101,7 +101,7 @@ Case Study #2 directly defines the v1.1.3 runtime-trust hardening scope:
 2. detect launcher / CLI / Skill / managed-install version skew in `doctor`,
 3. diagnose Windows reserved device names explicitly during workspace fingerprinting while preserving fail-closed evidence semantics.
 
-The non-invasive-init, delivery-audit, and compact-output work was intentionally separated from v1.1.3. It was first labeled v1.1.4, then v1.1.5 after pin/version management took v1.1.4. Later dogfood promoted recovery correctness into v1.1.5; the remaining operator-UX scope moved to v1.1.6, while v1.1.5 included only the demonstrated existing-ignore optimization from this case-study thread. Subsequent v1.1.6 cleanup and v1.2.0 host-write work moved the remaining operator-UX scope to v1.2.1.
+The non-invasive-init, delivery-audit, and compact-output work was intentionally separated from v1.1.3. It was first labeled v1.1.4, then v1.1.5 after pin/version management took v1.1.4. Later dogfood promoted recovery correctness into v1.1.5; the remaining operator-UX scope moved to v1.1.6, while v1.1.5 included only the demonstrated existing-ignore optimization from this case-study thread. Subsequent v1.1.6 cleanup and v1.2.0 host-write work moved the remaining operator-UX scope to v1.2.1; ChromeBridge HostWrite dogfood then reprioritized v1.2.1, so the scope now sits at v1.2.2.
 
 A later pre-release security review found a fourth v1.1.3 trust issue that was not part of this field run: live run and canonical task authority lacked the user-local integrity authentication already used for checkpoints and acquisition receipts. v1.1.3 also closes that gap. This is recorded separately so the historical case study does not retroactively claim the field run discovered it.
 

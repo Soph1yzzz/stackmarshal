@@ -124,9 +124,11 @@ curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/in
 The installer uses a dedicated virtual environment, installs the matching Codex Skill, verifies
 versioned Release assets, and runs a post-install doctor check. After that first bootstrap, v1.1.4
 made `stackmarshal pin latest` the normal update command; v1.1.5 adds real same-run checkpoint resume,
-legacy-state archival, and bounded verification correction. v1.2.0 adds a signed HostWriteAdapter
+legacy-state archival, and bounded verification correction. v1.2.0 added the signed HostWriteAdapter
 path for MCP/agent hosts that forbid shell-based project mutation while preserving direct writes as
-the default. `stackmarshal version` remains the quick runtime/pin/Skill/launcher drift check. The detailed installation, security, CLI, state, release,
+the default. v1.2.1 hardens the pending transaction invariant, adds compact append/CAS plans and
+recovery, signed workspace relocation, and a Git Bash launcher shim on Windows. `stackmarshal version`
+remains the quick runtime/pin/Skill/launcher drift check. The detailed installation, security, CLI, state, release,
 and development contracts remain below.
 
 ## Detailed overview
@@ -214,7 +216,7 @@ stackmarshal version
 Pin an exact release when reproducibility matters:
 
 ```bash
-stackmarshal pin 1.2.0
+stackmarshal pin 1.2.1
 ```
 
 `stackmarshal version` is the human check: it reports the running CLI, exact managed pin,
@@ -238,7 +240,7 @@ after restart before work can begin.
 For a Skill-only manual installation, use the matching release tag:
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.0/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.1/skills/stackmarshal
 ```
 
 ## Quick CLI tour
@@ -253,7 +255,7 @@ stackmarshal migrate --dry-run
 stackmarshal invocation "Use StackMarshal to build this"
 stackmarshal start --mode build --budget standard \
   --invocation "Use StackMarshal to build this"
-stackmarshal doctor --host-skill-version 1.2.0
+stackmarshal doctor --host-skill-version 1.2.1
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -276,7 +278,10 @@ stackmarshal resume inspect --run-id <run-id>
 stackmarshal --write-mode host init
 stackmarshal host-write status
 stackmarshal host-write check --plan-id <plan-id>
+stackmarshal host-write recover --plan-id <plan-id> [--path <relative-path>]
 stackmarshal host-write ack --plan-id <plan-id>
+stackmarshal relocate prepare --to <new-root>
+stackmarshal --write-mode host relocate accept --permit-id <permit-id>
 stackmarshal validate .stackmarshal/runs/<run-id>/run.json --kind run-state
 ```
 
@@ -292,9 +297,12 @@ project files but exposes its own file write/edit API, run the same mutating com
 `--write-mode host` instead.
 
 The command then performs all normal StackMarshal reasoning and validation but leaves the project
-untouched. It returns an HMAC-signed plan containing canonical project-relative paths, exact expected
-preimages (and SHA-256 hashes), final UTF-8 content hashes, and the original command result. Only one
-plan may be pending for a workspace.
+untouched. It returns an HMAC-signed plan containing canonical project-relative paths, preimage/CAS
+contracts, final UTF-8 content hashes, and the original command result. `write_text` keeps exact
+preimages; growing append-only evidence such as `events.jsonl` uses a compact `append_text` operation
+with the whole-file SHA/size, a signed tail, and only the appended bytes. Only one plan may be pending
+for a workspace, and v1.2.1 blocks every project-mutating command in both direct and host modes until
+that plan is acknowledged or aborted.
 
 ```text
 stackmarshal --write-mode host <normal mutating command...>
@@ -309,17 +317,25 @@ next StackMarshal mutation
 ```
 
 A host adapter should honor the plan's `required_directories` (or rely on a host write primitive that
-creates parent directories implicitly). For existing files, it should use its exact edit/replace
-primitive with `expected_preimage` as a compare-and-swap guard. For absent files it should confirm
-absence and use the host create/write primitive. `ack` independently hashes every postimage and does not clear the
-pending plan unless all outputs match. Plan/receipt authority lives in the same user-local HMAC
-boundary as StackMarshal state but outside the project. `host-write abort` is available only for an
-intentionally abandoned unapplied plan.
+creates parent directories implicitly). For `write_text`, existing files use the signed exact preimage
+as a compare-and-swap guard; absent files must still be absent when created. For `append_text`, hosts
+with native append/CAS should use the whole-file preimage hash. DevSpace can normally use the signed
+`expected_tail` as exact `oldText` and `expected_tail + append_content` as `newText`, avoiding a full
+history round trip. `host-write check` remains available when the host primitive cannot enforce the
+signed guard itself.
+
+`ack` independently hashes every final postimage and does not clear the pending plan unless all
+outputs match. If a file was changed accidentally, `host-write recover` surfaces the signed preimage
+(or its content-addressed recovery blob) without writing the project. Restore it through the native
+host API and retry. Plan/receipt authority lives in the user-local HMAC boundary outside the project.
+The pending slot is exclusive at filesystem creation time, so a concurrent process cannot replace it.
 
 This is a transport split, not a second state machine: budgets, task evidence, checkpoint/resume,
 verification freshness, finalization, and `COMPLETE` semantics are identical in direct and host
-modes. v1.2.0 does not host-plan legacy `migrate`; managed-install `pin`/`repair` also remain outside
-the project HostWriteAdapter.
+modes. v1.2.1 does not host-plan legacy `migrate`; managed-install `pin`/`repair` also remain outside
+the project HostWriteAdapter. Intentional workspace moves use `relocate prepare` before the move and
+`relocate accept` afterward; relocation and repository bootstrap are signed as separate identity
+migrations. See [HostWriteAdapter protocol](docs/HOST_WRITE_ADAPTER.md).
 
 ## Workflow
 
@@ -430,7 +446,7 @@ behavior is a v1 release requirement.
 `python scripts/build_release.py` resolves the current version from `pyproject.toml` and produces:
 
 - `install.ps1`, `install.sh`, and the shared verified `installer.py`
-- `stackmarshal-skill-v1.2.0.zip`
+- `stackmarshal-skill-v1.2.1.zip`
 - Python wheel and source distribution
 - source archive
 - `SHA256SUMS`

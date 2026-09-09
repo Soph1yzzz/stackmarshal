@@ -4,7 +4,7 @@ Use this index to jump directly to the part of StackMarshal you need to evaluate
 
 ## Architecture
 
-Start with [ARCHITECTURE.md](ARCHITECTURE.md) for the Core/adapter/Skill split, deterministic state model, bounded workflow, and major design boundaries.
+Start with [ARCHITECTURE.md](ARCHITECTURE.md) for the Core/adapter/Skill split, deterministic state model, bounded workflow, and major design boundaries. For shell-write-restricted hosts, [HOST_WRITE_ADAPTER.md](HOST_WRITE_ADAPTER.md) defines the signed transport contract and DevSpace apply/recovery path.
 
 ## Case Study
 
@@ -25,6 +25,7 @@ Use [REQUIREMENTS_TRACEABILITY.md](REQUIREMENTS_TRACEABILITY.md) to map requirem
 ## Release
 
 - [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) — current release process and required gates.
+- [RELEASE_NOTES_v1.2.1.md](RELEASE_NOTES_v1.2.1.md) — v1.2.1 HostWrite transaction hardening, compact append/CAS, recovery, relocation, and Git Bash launcher support.
 - [RELEASE_NOTES_v1.2.0.md](RELEASE_NOTES_v1.2.0.md) — v1.2.0 host-write transport foundation for shell-write-restricted hosts, with signed plan/check/ack semantics.
 - [RELEASE_NOTES_v1.1.6.md](RELEASE_NOTES_v1.1.6.md) — v1.1.6 Windows self-update cleanup hotfix for locked old managed venvs.
 - [RELEASE_NOTES_v1.1.5.md](RELEASE_NOTES_v1.1.5.md) — v1.1.5 dogfood recovery hardening: real resume, legacy archival, correction lane, and evidence/CLI fixes.

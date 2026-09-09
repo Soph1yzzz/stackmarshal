@@ -8,8 +8,8 @@
 
 <h1 align="center">StackMarshal</h1>
 
-<p align="center"><strong>Codexのための、有限・Research First型Agent Harness。</strong></p>
-<p align="center">調べ、揃え、制御し、有限に作り切る。</p>
+<p align="center"><strong>Codexの作業を、有限で検証可能なrunにするAgent Harness。</strong></p>
+<p align="center">必要なことを調べ、使えるものを選び、設計を固め、証拠を残して終える。</p>
 
 <p align="center">
   <a href="https://github.com/Soph1yzzz/stackmarshal/releases/latest"><img src="https://img.shields.io/github/v/release/Soph1yzzz/stackmarshal?style=flat-square&amp;label=release&amp;color=6f8cff" alt="Latest release" /></a>
@@ -29,45 +29,42 @@
   <strong><a href="docs/README.md">Docs</a></strong>
 </p>
 
-StackMarshalは、終わりが曖昧になりやすいCodex作業を**有限で監査可能なrun**へ変換します。
-必要な場合だけ調査し、既存Capabilityを整理し、trustを評価し、Architectureを凍結し、明示的な
-上限内で実装し、必須受け入れ条件を検証します。安全に完了できない場合は、再開可能な
-checkpointを残します。
+StackMarshalは、終わり方が曖昧になりやすいCodexの作業に、明確な上限と完了条件を持たせます。
+必要なら先に調査し、既存のSkillやMCP、ライブラリなどを比較してから設計を固めます。実装に入った後は、試行回数や作業量を追跡し、最後に受け入れ条件を証拠つきで確認します。安全に完了できない場合は、無理に`COMPLETE`へ進まず、続きから再開できるcheckpointを残します。
 
-> StackMarshalは「どんな依頼でも必ず完成」を保証しません。
-> 保証するのは、**証拠付きの`COMPLETE`か、正式かつ再開可能な有限停止**です。
+> StackMarshalが保証するのは「何でも必ず完成すること」ではありません。
+> **証拠のある`COMPLETE`か、理由と再開手順のある正式な停止**です。
 
 ## 30秒で分かるStackMarshal
 
 <table>
   <tr>
-    <td width="33%"><strong>RUNを有限化</strong><br/>budget、attempt、stagnation、terminal stateで作業をboundedに保ちます。</td>
-    <td width="33%"><strong>完了を証明</strong><br/>canonical task evidenceとverificationが<code>COMPLETE</code>をgateします。</td>
-    <td width="33%"><strong>安全に再開</strong><br/>integrity-protected checkpointが判断をrepository stateへ束縛します。</td>
+    <td width="33%"><strong>終わりを決める</strong><br/>budget、attempt、stagnation、terminal stateで、runが際限なく続かないようにします。</td>
+    <td width="33%"><strong>「終わった」を証明する</strong><br/>taskごとの証拠と最終verificationが揃わない限り、<code>COMPLETE</code>には進めません。</td>
+    <td width="33%"><strong>止まっても続きから戻れる</strong><br/>checkpointを現在のrepository stateと結び付け、再開時に食い違いを検出します。</td>
   </tr>
 </table>
 
-| 終端が曖昧なAgent作業 | StackMarshalを使う場合 |
+| よくあるAgent作業 | StackMarshalを使うと |
 |---|---|
-| 調査が必要か決める前に実装を始める | 明示的なResearch GateとCapability Mapを先に通す |
-| 既存Toolを再実装したり、依存を気軽に増やす | Skill / MCP / plugin / library / CLI / reference OSSを分離し、獲得前にtrustを評価する |
-| 実装途中でArchitectureが漂流する | Architecture Freezeを行い、再調査回数も上限化する |
-| 同じ失敗をcontext切れまで繰り返す | budget、task attempt、stagnation、failure fingerprintで有限化する |
-| 「終わった」と言うが完了条件が機械的に追えない | canonical task evidenceとverificationで`COMPLETE`をgateする |
-| Chatが止まると再開情報も消える | repository stateに束縛されたintegrity-protected checkpointを残す |
+| 調べるべきか判断する前に実装へ入る | Research Gateで、先に調査が必要かを決める |
+| 既存Toolを作り直したり、依存を気軽に増やす | Skill / MCP / plugin / library / CLI / reference OSSを分けて比較し、導入前にtrustを確認する |
+| 実装中に設計が少しずつ変わっていく | Architecture Freeze後の変更を明示し、再調査にも回数上限を置く |
+| 同じ失敗をcontext切れまで繰り返す | task attempt、failure fingerprint、stagnation、budgetで打ち切る |
+| Agentが「完了した」と言っても、何を確認したか分からない | task evidenceとverificationを`COMPLETE`の条件にする |
+| Chatが止まると、再開に必要な情報も消える | checkpointに現在の状態と次の一手を残す |
 
-### 他と何が違うか
+### Promptだけで頑張らせる仕組みではありません
 
-- **有限性をPromptだけに任せない**：決定論的Coreがrun state、budget、stop condition、
-  task evidence、terminal stateを管理します。
-- **Research FirstだがResearch Alwaysではない**：小さなlocal作業は調査を省略でき、必要な作業だけ
-  boundedなfield/capability調査を通してからArchitectureを凍結します。
-- **Security GateがHarness内にある**：publication、secret、billing、privilege、global write、
-  external binary、network writeは承認境界のままです。未知のcommand formもfail-closedします。
-- **Integrityをrepository境界の外へ置く**：ユーザー領域HMACでlive run/task authority、checkpoint、
-  receiptを保護し、resume時はrepository lineageと正確なworktree fingerprintにも束縛します。
-- **Codex専用Adapter + Agent非依存Core**：v1はmulti-agent orchestratorではありません。
-  Codex固有挙動をAdapter/Skillへ分離し、Core側は状態・Policy Modelを再利用可能にしています。
+StackMarshalの中心にあるのは、Codexへの長い指示文ではなく決定論的なCoreです。run state、budget、stop condition、task evidence、terminal stateはCoreが管理します。
+
+調査は必要な場面に絞ります。小さな修正なら、そのまま実装へ進みます。新規開発や依存追加、セキュリティ、認証など、先に調べる意味がある作業だけResearchを挟みます。
+
+Securityに関わる操作もworkflowの途中で判定します。publication、secret、billing、privilege、global write、external binary、network writeには承認境界を置きます。未知のcommand formも、安全だと推測して先へ進めません。
+
+runやtaskの正本、checkpoint、acquisition receiptは、ユーザー領域にあるHMAC鍵で保護します。repository内のファイルだけを権威にはしません。resume時にはGitの状態とworktree fingerprintも照合するので、workspaceが変わった古いcheckpointはそのまま再利用できません。
+
+現在提供しているSkillはCodex向けですが、CoreはAgent固有の処理から分離しています。v1.2.0では書き込み経路も分けました。通常のCodexは従来どおり直接ファイルへ書き込み、DevSpaceのようにshellからprojectを書けないhostではHostWriteAdapterを使います。
 
 ### Dogfooding実証：RepoHealth
 
@@ -75,90 +72,78 @@ checkpointを残します。
   <a href="docs/CASE_STUDY_01_REPOHEALTH.ja.md"><img src="docs/assets/stackmarshal-repohealth-proof.svg" alt="RepoHealth Case Study #1 実証パネル" width="100%" /></a>
 </p>
 
-**Case Study #1**では、CodexがStackMarshalを明示起動し、ほぼ空のlocal workspaceから
-runtime dependency 0のOSS-readiness CLI「RepoHealth」を構築しました。採用runの結果は次の通りです。
+**Case Study #1**では、ほぼ空のlocal workspaceでStackMarshalを明示起動し、CodexにOSS-readiness CLI「RepoHealth」を作らせました。runtime dependencyは0です。
 
-- **tests 6 passed**
-- **Ruff PASS**
-- **strict mypy PASS**
-- **branch-aware coverage 92%**（gate 85%）
-- **wheel + sdist build PASS**
-- **local wheel install smoke PASS**
-- StackMarshal terminal state：**`COMPLETE`**
+採用runでは、次の条件をすべて通して`COMPLETE`まで到達しました。
 
-さらに、このdogfoodingは都合の悪いintegration gapも隠さず露出させ、その後のv1.1系
-live-orchestration hardeningへ直接つながりました。証拠・留保・remote CI未実行条件を含む完全な記録は
-[Case Study #1 — RepoHealth 日本語版](docs/CASE_STUDY_01_REPOHEALTH.ja.md)を参照してください。
+- tests 6 passed
+- Ruff PASS
+- strict mypy PASS
+- branch-aware coverage 92%（gate 85%）
+- wheel + sdist build PASS
+- local wheel install smoke PASS
+
+このdogfoodingでは、StackMarshal側の問題もいくつか見つかりました。live state、budget accounting、task同期の不足は、その後のv1.1系hardeningへ直接つながっています。都合のよい成功例だけを切り出した記録ではありません。
+
+証拠、留保、remote CI未実行条件を含む詳細は[Case Study #1 — RepoHealth 日本語版](docs/CASE_STUDY_01_REPOHEALTH.ja.md)に残しています。
 
 ### Field dogfood：MandateMarshal v0.2
 
-**Case Study #2**では、別OSSのdurable runtime / crash recovery実装でStackMarshalを実使用しました。
-5 mandatory taskを合計5 attemptで完了し、research round 1、tool calls 72を記録してfinalization後に
-`COMPLETE`へ到達しました。特に、最終盤のsource変更後にverificationが古くなった状態で進もうとすると、
-`missing_verified_workspace_fingerprint`で`COMPLETE`を拒否し、最終workspaceの再verificationを要求しました。
+**Case Study #2**では、別OSSのdurable runtime / crash recovery実装でStackMarshalを実際に使いました。mandatory taskは5件、attemptも合計5回。research roundは1、tool callは72で、finalization後に`COMPLETE`へ到達しています。
 
-同じfield runから、v1.1.3へ持ち込むGit porcelain path parsing、launcher/CLI/Skill version skew、Windows予約device名
-fingerprint診断の3件も見つかりました。その後のrisk-triggered pre-release security reviewで4件目となるunsigned live run/task authorityも見つかり、field runの歴史を書き換えずv1.1.3へ追加hardeningしています。詳細は
-[Case Study #2 — MandateMarshal 日本語版](docs/CASE_STUDY_02_MANDATEMARSHAL.ja.md)（[English](docs/CASE_STUDY_02_MANDATEMARSHAL.md)）を参照してください。
+このrunで特に重要だったのは、最終盤でsourceを変更した後の挙動です。以前のverification結果をそのまま使おうとすると、`missing_verified_workspace_fingerprint`で`COMPLETE`が拒否され、変更後のworkspaceをもう一度検証する必要がありました。
+
+同じrunから、v1.1.3で直すことになる問題も3件見つかりました。Git porcelain path parsing、launcher / CLI / Skillのversion skew、Windows予約device名のfingerprint処理です。その後のpre-release security reviewでは、unsigned live run/task authorityも追加で見つかっています。
+
+詳細は[Case Study #2 — MandateMarshal 日本語版](docs/CASE_STUDY_02_MANDATEMARSHAL.ja.md)（[English](docs/CASE_STUDY_02_MANDATEMARSHAL.md)）を参照してください。
 
 ### 1コマンドで導入
 
-**Windows PowerShell：**
+**Windows PowerShell**
 
 ```powershell
 irm https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.ps1 | iex
 ```
 
-**macOS / Linux：**
+**macOS / Linux**
 
 ```bash
 curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.sh | bash
 ```
 
-installerは専用virtual environmentへCLIを隔離導入し、対応するCodex Skillを配置し、versioned
-Release assetsを検証してpost-install doctorまで実行します。初回bootstrap後はv1.1.4から
-`stackmarshal pin latest`を通常updateに使えます。v1.1.5では同一runの実resume、legacy state archival、
-bounded verification correctionを追加し、v1.2.0では通常のdirect writeを維持したまま、DevSpace等の
-shell-write禁止host向けにsigned HostWriteAdapterを追加しました。`stackmarshal version`でruntime / pin / Skill /
-launcherのdriftもすぐ確認できます。詳細な導入、Security、CLI、state、release、development
-contractは以下の既存説明を維持しています。
+installerは専用のvirtual environmentへCLIを入れ、同じversionのCodex Skillも配置します。Release assetを検証し、最後にdoctorまで実行します。現在のPython環境やglobal PythonへStackMarshalを混ぜる方式ではありません。
 
-## 詳細概要
+初回導入後の更新は`stackmarshal pin latest`で行えます。versionを固定したい場合はexact versionを指定できます。
 
-StackMarshalは、Codex向けのResearch First型オーケストレーションSkillと、
-決定論的な補助CLIです。依頼の構造化、環境監査、類似OSS調査、Skills・MCP・
-プラグイン・ライブラリ・CLIの探索、安全性とライセンス評価、設計凍結、有限予算での
-実装、受け入れ条件の検証、停止時のcheckpoint/resumeを一つの流れにまとめます。
+v1.1.5では同一runのresume、legacy stateの安全なarchive、verification後の小さな修正を扱う`CORRECTION` laneを追加しました。v1.2.0でHostWriteAdapterを導入し、v1.2.1ではその実運用で見つかったpending transaction、payload量、workspace移動、Git Bashからの起動をまとめて詰めています。
 
-> StackMarshalは「どんな依頼でも必ず完成」を保証しません。
-> **証拠付きの`COMPLETE`か、正式かつ再開可能な停止状態**を保証します。
+## StackMarshalが管理するもの
 
-## なぜ必要か
+StackMarshalは、Codex向けのResearch First型orchestration Skillと、その状態を管理するCLI/Coreで構成されています。
 
-Coding Agentは、調査前に実装を始める、既存OSSを再実装する、古い・危険な依存を
-選ぶ、実装中に設計を変え続ける、同じ失敗を反復する、停止時に再開情報を残さない、
-といった無駄を起こしやすいです。StackMarshalはそれらを観測可能な上限と正式状態で
-制御します。
+依頼を整理し、必要なら環境と既存OSSを調べ、使えるSkill・MCP・plugin・library・CLIを比較します。その後でArchitectureを固め、taskへ分解し、上限つきで実装します。最後は受け入れ条件を確認し、完了できなければcheckpointを残します。
 
-## 中核となる保証
+### 守っている契約
 
-- **明示起動のみ**：通常の実装依頼では発火しません。
-- **必要な場合だけResearch First**：小さな局所修正では調査を省略できます。
-- **横断的なCapability Map**：Skill、MCP、プラグイン、ライブラリ、CLI、参考OSSを区別します。
-- **Supply Chain防御**：pin、hash、provenance、install hook検査、最小権限、承認ゲート、rollback receipt。
-- **Architecture Freeze**：再調査は重大条件に限定し、回数上限を持ちます。
-- **Authenticated live authority**：1つのbounded jobに対してRUNNING runは1本だけ。live `run.json`とcanonical task graphはユーザー領域のHMACで保護し、repository内容からphase/COMPLETE権限を偽造できないようfail-closedにします。nested workspaceは親Gitを所有repoとして誤認せず、正当なrepo bootstrapはlineage migrationとして記録します。
-- **Live activity budget**：観測可能なCodex作業をCore側のcounterへ接続し、実作業したのに`used=0`の帳簿を残しません。
-- **Canonical Task Graph**：HMAC認証されたmachine-readableなtask状態と証拠を正本にし、Markdown viewへ同期して`COMPLETE`をgateします。
-- **有限停止ハーネス**：予算、同一failure fingerprint、停滞、scope driftを検出します。
-- **Checkpoint / Resume**：同じユーザー領域HMACのintegrity境界でcheckpointとacquisition receiptも保護し、`stackmarshal resume <run-id>`はproject identity、Git state、exact worktree fingerprint、signed resume phaseを検証したresumable stopだけを同一run IDで再開します。
-- **Bounded Correction**：軽微なverification修正は`VERIFICATION -> CORRECTION -> VERIFICATION`で処理し、architecture replan budgetを消費しません。
-- **Legacy evidenceを権威へ昇格しない**：`stackmarshal migrate`は旧unsigned stateをhash付きarchiveへ退避し、勝手に署名してcurrent authorityへ昇格しません。
-- **Agent非依存Core**：通常のCodex/CLIは従来どおりdirect filesystem transportを使い、shellからprojectを書けないDevSpace等のhostだけHMAC署名済みHostWriteAdapterへ切り替えられます。Coreのstate/phase authorityはどちらでも同一です。
+- **明示的に呼ばれたときだけ起動する**：通常の実装依頼では勝手にStackMarshalを始めません。
+- **調査は必要なときだけ行う**：小さな局所修正に大掛かりなResearchを挟みません。
+- **使えるものを種類ごとに分ける**：Skill、MCP、plugin、library、CLI、参考OSSを同じものとして扱いません。
+- **導入前にSupply Chainを確認する**：pin、hash、provenance、install hook、権限、license、rollback方法を確認します。
+- **実装前にArchitectureを固める**：後から前提が崩れた場合だけ、上限つきで再調査します。
+- **live stateをrepositoryだけに任せない**：`run.json`とcanonical task graphはユーザー領域HMACで認証します。repository内のファイルを書き換えただけではphaseや`COMPLETE`を偽装できません。
+- **実際の作業量をbudgetへ記録する**：CodexがToolを使ったのに帳簿上は`used=0`という状態を避けます。
+- **taskの正本はmachine-readableに保つ**：task statusとevidenceをJSONで管理し、Markdownは人間向けviewとして生成します。
+- **止まり方を正式なstateにする**：budget exhaustion、同一failureの反復、stagnation、scope driftなどを検出してrunを有限に保ちます。
+- **checkpointから同じrunへ戻れる**：`stackmarshal resume <run-id>`は、checkpointのHMAC、project identity、Git state、worktree fingerprint、resume phaseを照合してから再開します。
+- **verificationで見つかった小修正は別laneで扱う**：`VERIFICATION -> CORRECTION -> VERIFICATION`ならarchitecture replan budgetを消費しません。
+- **古いunsigned stateを勝手に信用しない**：`stackmarshal migrate`は旧stateをhash付きでarchiveし、署名済みの現在stateへ昇格させません。
+- **書き込み手段が違ってもCoreの判断は変えない**：通常はdirect filesystem write、shell write禁止hostではHostWriteAdapterを使います。どちらでもstate machine、budget、acceptance、completion ruleは同じです。
 
 ## 起動方法
 
-発火する例：
+StackMarshalは、名前を出しただけでは起動しません。「StackMarshalを使う」と明示した依頼だけを対象にします。
+
+起動する例：
 
 ```text
 StackMarshalを使って実装して。
@@ -167,7 +152,7 @@ Use StackMarshal to build this feature.
 $stackmarshal build
 ```
 
-発火しない例：
+起動しない例：
 
 ```text
 この機能を実装して。
@@ -176,25 +161,23 @@ StackMarshalに似たOSSを比較して。
 README内のStackMarshalという表記を直して。
 ```
 
-## 導入・更新
+## 導入と更新
 
-推奨installerは、CLIを専用virtual environmentへ隔離導入し、同じversionのCodex Skillも
-一括で配置します。version固定されたRelease assetsを`SHA256SUMS`で検証し、導入後doctorと
-一時ファイル削除まで実行します。
+通常はReleaseのinstallerを使います。CLIとCodex Skillのversionを揃えて導入し、`SHA256SUMS`でRelease assetを検証した後、doctorで状態を確認します。
 
-**Windows PowerShell：**
+**Windows PowerShell**
 
 ```powershell
 irm https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.ps1 | iex
 ```
 
-**macOS / Linux：**
+**macOS / Linux**
 
 ```bash
 curl -fsSL https://github.com/Soph1yzzz/stackmarshal/releases/latest/download/install.sh | bash
 ```
 
-初回bootstrap後の通常updateとversion管理はCLI自身で行えます。
+初回導入後はCLI自身から更新できます。
 
 ```bash
 stackmarshal pin latest
@@ -202,31 +185,26 @@ stackmarshal pin status
 stackmarshal version
 ```
 
-再現性のためexact releaseへ固定する場合：
+exact releaseへ固定する場合：
 
 ```bash
-stackmarshal pin 1.2.0
+stackmarshal pin 1.2.1
 ```
 
-`stackmarshal version`は人間向け確認で、実行中CLI、managed pin、installed Skill、resolved launcher、
-`OK` / `DRIFTED`をまとめて表示します。`stackmarshal --version`はscript向けにruntime versionだけを
-返します。`pin`は選択したpublished ReleaseのbootstrapをRelease `SHA256SUMS`で検証してから既存の
-atomic installerへ委譲するため、update / repair / rollbackロジックは二重実装しません。
+`stackmarshal version`では、現在動いているCLI、managed pin、installed Skill、PATHで解決されたlauncherをまとめて確認できます。すべて揃っていれば`OK`、ずれがあれば`DRIFTED`です。scriptからversion文字列だけ欲しい場合は`stackmarshal --version`を使います。
 
-GitとPython 3.11以上が前提です。未導入の場合は、検出結果を説明した上でOS package managerを
-使ってよいか確認します。user `PATH`の変更、または編集済み・installer管理外のSkill置換にも
-確認が入ります。完全な非対話導入を意図する場合だけ、PowerShellは`-Yes`、Bashは`--yes`を
-使用してください。downgradeは`-AllowDowngrade` / `--allow-downgrade`を明示しない限り拒否します。
+`pin`は、指定したReleaseのbootstrapを`SHA256SUMS`で検証してから、既存のatomic installerへ処理を渡します。update、repair、rollbackを別々に実装していません。
 
-CLIのRuntime必須依存は**ゼロ**で、現在のPython環境やglobal Pythonへは導入しません。
-Skill導入・更新後はCodexを再起動してください。installerはCodex homeのSkill外にも
-restart-pending markerを残します。再起動前の古いSkillはStackMarshal起動を拒否し、
-再起動後に同versionの新しいSkillだけがmarkerを確認・解除してから作業を開始します。
+前提はGitとPython 3.11以上です。足りない場合、installerは何が不足しているかを表示し、OS package managerを使う前に確認を取ります。user `PATH`の変更や、編集済み・installer管理外のSkillを置き換える場合も同様です。非対話で導入する場合だけPowerShellの`-Yes`、Bashの`--yes`を使ってください。
 
-Skillだけを手動導入する場合も、`main`ではなく対応するRelease tagへ固定します。
+downgradeは明示しない限り拒否します。必要な場合は`-AllowDowngrade`または`--allow-downgrade`を付けます。
+
+CLIの必須runtime dependencyは0です。Skillを導入・更新した後はCodexを再起動してください。installerはCodex homeにrestart-pending markerを置きます。再起動前の古いSkillはStackMarshalの起動を拒否し、再起動後に同じversionのSkillがmarkerをacknowledgeしてから通常状態へ戻ります。
+
+Skillだけを手動で入れる場合も、`main`ではなく対応するRelease tagへ固定してください。
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.0/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.1/skills/stackmarshal
 ```
 
 ## CLI例
@@ -241,7 +219,7 @@ stackmarshal migrate --dry-run
 stackmarshal invocation "StackMarshalを使って実装して"
 stackmarshal start --mode build --budget standard \
   --invocation "StackMarshalを使って実装して"
-stackmarshal doctor --host-skill-version 1.2.0
+stackmarshal doctor --host-skill-version 1.2.1
 stackmarshal state show
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
@@ -263,25 +241,37 @@ stackmarshal resume <run-id> --reason "blocker resolved"
 stackmarshal resume inspect --run-id <run-id>
 stackmarshal host-write status
 stackmarshal host-write check --plan-id <plan-id>
+stackmarshal host-write recover --plan-id <plan-id> [--path <relative-path>]
 stackmarshal host-write ack --plan-id <plan-id>
+stackmarshal relocate prepare --to <new-root>
+stackmarshal --write-mode host relocate accept --permit-id <permit-id>
 ```
 
 ### Shellからprojectを書けないHost
 
-通常のCodex/CLIでは何も変更せず、従来どおりStackMarshal自身が`.stackmarshal/`をatomic writeします。
-DevSpaceのようにshell経由のproject mutationを禁止し、代わりにnative `write/edit` APIを持つhostでは、
-project-mutating commandへ`--write-mode host`を付けます。Coreはprojectを書かず、ユーザー領域に
-HMAC署名済みwrite-planを作成してJSONとして返します。
+普通のCodexやCLIは今までどおりです。StackMarshal自身が`.stackmarshal/`へ直接書き込みます。HostWriteAdapterを使うのは、DevSpaceのように「shellからproject fileを書き換えない」という契約があるhostだけです。
 
-各operationにはcanonical relative path、expected preimageとそのSHA-256、要求するpostimageと
-そのSHA-256が入り、必要な親directoryは`required_directories`に列挙されます（hostのwrite primitiveが
-親directoryを暗黙作成する場合はそれで満たせます）。hostはまず`host-write check`を通し、planのcontentを
-native file APIで適用し、その後`host-write ack`を実行します。ackは実際のpostimage hashを再検証します。pending
-planが残っている間は次のproject mutationを拒否するため、host transportがStackMarshalのphase/
-completion authorityを持つことはありません。
+```text
+stackmarshal --write-mode host <通常のmutating command>
+        ↓
+hostのwrite/edit APIでsigned planを適用
+        ↓
+stackmarshal host-write ack --plan-id <id>
+```
 
-機械出力はJSONです。明示的checkpoint作成が成功した場合はexit 0でterminal statusと成功を返します。
-formal stop commandは引き続きbudget、approval、unsafe、external blockedを非zero exit codeで区別します。
+`host-write check`は残っていますが、必ず一段挟むための儀式ではありません。host側のAPIだけではsigned preimageを十分に確認できない場合や、状態がおかしいときのpreflightとして使います。
+
+`write_text`は従来どおり、既存fileなら変更前の全文とSHA-256を比較条件にします。一方、増え続ける`events.jsonl`はv1.2.1から`append_text`になりました。planへ履歴全文を毎回埋め込まず、file全体のSHA-256とsize、末尾最大512文字の`expected_tail`、今回追加する`append_content`だけを持ちます。DevSpaceなら`expected_tail`を`oldText`、`expected_tail + append_content`を`newText`として`edit`へ渡せるため、長いrunでもevent履歴全文を会話へ往復させずに済みます。
+
+全operationを適用した後に`host-write ack`を1回だけ実行します。Coreはproject上の最終postimageをhashし直し、signed planと一致したときだけpendingを解除します。pending planがある間は、`--write-mode host`を付けたcommandだけでなくdirect modeのproject mutationも止まります。pending file自体もexclusive createになっているため、別processが同時にplanを作ってslotを上書きすることはありません。
+
+途中でfileを壊した場合は`host-write recover`からsigned preimageを取り出せます。recover自身はprojectを書きません。返された内容をhostのnative file APIで戻してから、元のplanをやり直します。
+
+workspaceを移動するときは、移動前に`stackmarshal relocate prepare --to <new-root>`でsigned permitを作ります。移動後に`relocate accept`を通すと、deliverable fingerprintとrepository identityを照合した上で`workspace_relocation`として記録します。後から`git init`した場合の`workspace_repository_bootstrap`とは別のmigrationです。
+
+`migrate`はv1.2.1でもhost-write対象外です。managed installに関わる`pin`と`repair`もproject HostWriteAdapterの外側で動きます。詳しいtransport契約は[HostWriteAdapter protocol](docs/HOST_WRITE_ADAPTER.md)にまとめています。
+
+機械向け出力はJSONです。`checkpoint create`が正常にcheckpointを作れた場合はexit 0を返します。一方、formal `stop`はbudget、approval、unsafe、external blockedなどの理由を非zero exit codeで区別します。
 
 ## Workflow
 
@@ -289,49 +279,51 @@ formal stop commandは引き続きbudget、approval、unsafe、external blocked�
 flowchart TD
   U[明示起動] --> I[要件と受け入れ条件]
   I --> E[環境監査]
-  E --> R[有限調査]
+  E --> R[必要なら調査]
   R --> C[Capability Map]
-  C --> T[信頼評価と安全な能力獲得]
-  T --> F[設計凍結]
+  C --> T[Trust評価と安全な導入]
+  T --> F[Architecture Freeze]
   F --> G[Task Graph]
-  G --> B[有限実装]
-  B --> V[検証]
-  V -->|bounded fix| Q[Correction]
+  G --> B[上限つき実装]
+  B --> V[Verification]
+  V -->|小さな修正| Q[Correction]
   Q --> V
-  V -->|全必須条件に証拠| X[COMPLETE]
-  V -->|正式停止| H[Checkpoint]
-  H -->|validated resume| V
+  V -->|必須evidenceが揃う| X[COMPLETE]
+  V -->|完了できない| H[Checkpoint]
+  H -->|検証して再開| V
 ```
 
-正式停止状態は`BUDGET_EXHAUSTED`、`STAGNATED`、`REPEATED_FAILURE`、
-`APPROVAL_REQUIRED`、`BLOCKED_EXTERNAL`、`VERIFICATION_EXTERNAL_BLOCKED`、`UNSAFE_DEPENDENCY`、
-`SCOPE_DRIFT`、`INVALID_STATE`、`USER_CANCELLED`です。
+正式な停止状態は次のとおりです。
+
+`BUDGET_EXHAUSTED`、`STAGNATED`、`REPEATED_FAILURE`、`APPROVAL_REQUIRED`、`BLOCKED_EXTERNAL`、`VERIFICATION_EXTERNAL_BLOCKED`、`UNSAFE_DEPENDENCY`、`SCOPE_DRIFT`、`INVALID_STATE`、`USER_CANCELLED`
 
 ## Case Study
 
-- **Case Study #1 — RepoHealth**：ほぼ空のlocal workspaceから、CodexがStackMarshalを明示起動してruntime dependency 0のOSS-readiness CLIを作成し、tests、Ruff、strict mypy、branch-aware coverage 92%、package build、local install smokeまで完走したPhase 3B dogfoodingです。同時にlive state、budget accounting、task同期の次パッチ課題も発見しました。詳細は[日本語Case Study](docs/CASE_STUDY_01_REPOHEALTH.ja.md)（[English](docs/CASE_STUDY_01_REPOHEALTH.md)）を参照してください。
-- **Case Study #2 — MandateMarshal v0.2**：実OSSのdurable runtime / crash recovery開発でStackMarshalを使用し、late source edit後のstale verificationをcompletion gateが実際に拒否しました。同じrunでv1.1.3のruntime-trust hardening対象も発見しています。詳細は[日本語Field Case Study](docs/CASE_STUDY_02_MANDATEMARSHAL.ja.md)（[English](docs/CASE_STUDY_02_MANDATEMARSHAL.md)）を参照してください。
+- **Case Study #1 — RepoHealth**：ほぼ空のlocal workspaceから、runtime dependency 0のOSS-readiness CLIを作ったdogfoodingです。tests、Ruff、strict mypy、branch-aware coverage 92%、package build、local install smokeまで通し、同時にStackMarshal側のlive state、budget accounting、task同期の問題も見つけました。詳細は[日本語Case Study](docs/CASE_STUDY_01_REPOHEALTH.ja.md)（[English](docs/CASE_STUDY_01_REPOHEALTH.md)）にあります。
+- **Case Study #2 — MandateMarshal v0.2**：実際のOSS開発でdurable runtime / crash recoveryを実装したfield dogfoodです。source変更後に古くなったverificationをcompletion gateが拒否し、v1.1.3で直すことになるruntime-trust問題も同じrunから見つかりました。詳細は[日本語Field Case Study](docs/CASE_STUDY_02_MANDATEMARSHAL.ja.md)（[English](docs/CASE_STUDY_02_MANDATEMARSHAL.md)）を参照してください。
 
 ## セキュリティモデル
 
-外部README、Issue、コメント、AGENTS、SKILLは未信頼データです。それらの記述は、
-コマンド実行、秘密情報の読取、ポリシー変更、再帰呼び出し、公開、COMPLETE判定を
-許可できません。StackMarshalはコマンドを分類し、global write、network write、
-secret、課金、公開、外部binary、管理者権限を承認対象にします。未知のコマンド形式も
-安全と推測せず、承認必須としてfail-closedします。
+外部のREADME、Issue、コメント、AGENTS、SKILLは、StackMarshalにとって未信頼の入力です。そこに「このcommandを実行しろ」「secretを読め」「policyを変えろ」と書かれていても、それだけでは権限になりません。
 
-既存のdirty stateを保護し、run IDの形式、workspace境界、Release入力のsymlinkを検証し、
-rollbackをreceiptが実際に作成したファイルだけに制限します。一般的なsecret形式をlogから
-redactし、provenanceを保存します。licenseなし、危険なinstall hook、Critical既知脆弱性、
-過剰権限、検査不能binary、pin不能な候補は拒否します。
+StackMarshalはcommandを分類し、外部へ影響する操作に承認を要求します。対象はglobal write、network write、secret access、課金、publication、external binary、privilegeです。知らないcommand formも、安全だろうと推測せずfail-closedします。
 
-脆弱性報告は[SECURITY.md](SECURITY.md)を参照してください。
+既存のdirty stateは保持します。run ID、workspace境界、Release入力のsymlinkはそれぞれ検証します。rollbackの対象も、acquisition receiptが実際に作成したfileだけです。一般的なsecret形式はlogからredactし、導入したもののprovenanceを残します。
 
-Checkpointとacquisition receiptの署名鍵はRepository外の
-`~/.stackmarshal/integrity-signing.key`へ保存されます。Checkpointはtracked、staged、untrackedを
-含むworktree内容fingerprintも固定します。管理されたユーザー状態領域や鍵移行が必要な場合は、
-`STACKMARSHAL_STATE_HOME`または`STACKMARSHAL_SIGNING_KEY_FILE`を設定してください。
-鍵を失った状態ファイルは、意図的に黙って信頼されません。
+次のような候補は採用しません。
+
+- licenseがない
+- 危険なinstall hookを持つ
+- Criticalの既知脆弱性がある
+- 要求権限が過剰
+- binaryを検査できない
+- 再現可能なpinができない
+
+Checkpointとacquisition receiptの署名鍵はrepository外の`~/.stackmarshal/integrity-signing.key`に保存します。Checkpointにはtracked / staged / untrackedを含むworktree fingerprintも記録されます。
+
+管理するユーザーstateの場所を変えたい場合は`STACKMARSHAL_STATE_HOME`、署名鍵を別の場所へ置く場合は`STACKMARSHAL_SIGNING_KEY_FILE`を設定できます。鍵を失ったstateは、署名を検証できないまま黙って信用することはありません。
+
+脆弱性の報告方法は[SECURITY.md](SECURITY.md)を参照してください。
 
 ## 開発
 
@@ -350,32 +342,34 @@ python scripts/version_contract.py --check
 python scripts/release_gate.py --stage candidate
 ```
 
-Release versionのauthorityは`pyproject.toml [project].version`です。意図的にversionを
-bumpした後は`python scripts/version_contract.py --sync`で現在versionのmirrorだけを同期します。
-Core / Skill / living documentationに同期漏れがあればCIとrelease builderはfail-closeします。
-候補をcommitしてworktreeがcleanになった後は`python scripts/release_gate.py --stage immutable`で
-決定論的Release buildとplatform bootstrap installer smokeまで一括検証します。このsmokeは必須で
-skipできません。制限されたlocal hostがPowerShell/Bashを起動できない場合は
-`python scripts/smoke_installer.py --direct-installer`で共有installer経路を診断できますが、これは
-immutable bootstrap gateの代替ではありません。公開後の
-`--stage published --release-dir <downloaded-assets>`は、期待asset set、checksum、component version、
-manifest/provenanceのHEAD束縛、local release tagを検証します。bundle内のchecksumだけを真正性のrootとは
-扱わず、Release契約上はGitHub側で記録されたasset digestも独立に確認します。
+Release versionの正本は`pyproject.toml [project].version`です。versionを意図的に上げた後は、`python scripts/version_contract.py --sync`で現在versionを参照するmirrorだけを同期します。Core、Skill、READMEなどにversionの食い違いがあれば、CIとrelease builderは失敗します。
 
-CIはUbuntu、macOS、WindowsでPython 3.11〜3.13を検証します。Windows 11互換は
-v1の必須Release Gateです。
+candidateをcommitし、worktreeがcleanになったら`python scripts/release_gate.py --stage immutable`を実行します。ここでは決定論的なRelease buildに加え、platform bootstrap installer smokeまでまとめて検証します。このsmokeはRelease gateの一部なのでskipできません。
 
-## 制限
+local host側の制限でPowerShellやBashそのものをspawnできない場合は、`python scripts/smoke_installer.py --direct-installer`で共有installer経路だけを診断できます。ただし、これはimmutable stageで行うplatform bootstrap smokeの代わりにはなりません。
 
-- v1はCodex専用Adapterで、multi-agent orchestrationではありません。
-- LLMが全手順へ必ず従うこと自体は保証できません。Coreが状態、上限、検証、証拠形式を決定論的に管理します。
-- Live調査能力はホスト側のGitHub・Web・Registry Adapterへ依存します。
-- 脆弱性と名称・商標確認は時間依存なので、Releaseごとに再確認が必要です。
-- PyPI公開はGitHub v1 Releaseとは分離しています。
+公開後は、GitHubからassetを取り直して次を実行します。
+
+```bash
+python scripts/release_gate.py --stage published --release-dir <downloaded-assets>
+```
+
+published gateでは、assetの構成とchecksum、各componentのversion、manifest / provenanceとGit HEADの対応、local release tagを確認します。bundle内のchecksumだけには頼りません。GitHub側が記録したasset digestも別に照合します。
+
+CIはUbuntu、macOS、WindowsでPython 3.11〜3.13を検証します。Windows 11互換はv1のRelease条件です。
+
+## 現時点の制限
+
+v1系はCodex向けです。CoreはAgent固有処理から分離していますが、Claude CodeやGemini CLIの正式adapterはまだありません。multi-agent orchestrationも未実装です。
+
+LLMがSkillの手順に必ず従う保証はありません。StackMarshalが決定論的に管理できるのは、Coreが扱うstate、budget、検証条件、証拠形式、stop ruleの範囲です。
+
+live調査能力はhost側のGitHub / Web / Registry adapterに依存します。脆弱性情報や名称・商標の確認は時間とともに変わるため、Releaseごとに再確認が必要です。
+
+PyPIへの公開はGitHub Releaseとは分けています。
 
 ## Contribution / License
 
-[CONTRIBUTING.md](CONTRIBUTING.md)、[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)、
-[docs/RFC_PROCESS.md](docs/RFC_PROCESS.md)を参照してください。
+Contributionの手順は[CONTRIBUTING.md](CONTRIBUTING.md)にあります。行動規範は[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)、RFCの進め方は[docs/RFC_PROCESS.md](docs/RFC_PROCESS.md)を参照してください。
 
-Apache License 2.0です。詳細は[LICENSE](LICENSE)を参照してください。
+LicenseはApache License 2.0です。全文は[LICENSE](LICENSE)にあります。

@@ -28,6 +28,7 @@ from .hostwrite import (
     check_pending_plan,
     create_pending_plan,
     pending_status,
+    recover_pending_plan,
     require_no_pending_plan,
 )
 from .lock import verify_lock
@@ -35,6 +36,13 @@ from .migration import MigrationError, migrate_legacy_state
 from .models import ProgressSnapshot
 from .pinning import PinError, install_pin
 from .progress import evaluate
+from .relocation import (
+    RelocationError,
+    accept_relocation,
+    load_relocation_permit,
+    migrate_checkpoint_for_relocation,
+    prepare_relocation,
+)
 from .scoring import score_candidate
 from .state import (
     append_event,
@@ -703,7 +711,7 @@ def _launcher_package_version(path: Path) -> str | None:
     """Infer a launcher runtime version only from non-executing, high-confidence evidence."""
     normalized = _normalized_path(path)
     try:
-        if path.suffix.casefold() in {".cmd", ".bat", ".sh"} or (os.name != "nt" and path.is_file()):
+        if path.suffix.casefold() in {".cmd", ".bat", ".sh"} or path.name.casefold() == "stackmarshal" or (os.name != "nt" and path.is_file()):
             with path.open("rb") as handle:
                 text = handle.read(16_384).decode("utf-8", errors="replace")
             match = re.search(r"[\\/]versions[\\/]v(\d+\.\d+\.\d+)[\\/]", text)
@@ -744,7 +752,7 @@ def _launcher_metadata_versions(path: Path) -> list[str]:
 def _path_stackmarshal_candidates() -> list[dict[str, Any]]:
     names: tuple[str, ...]
     if os.name == "nt":
-        names = ("stackmarshal.com", "stackmarshal.exe", "stackmarshal.bat", "stackmarshal.cmd")
+        names = ("stackmarshal.com", "stackmarshal.exe", "stackmarshal.bat", "stackmarshal.cmd", "stackmarshal")
     else:
         names = ("stackmarshal",)
     candidates: list[dict[str, Any]] = []
@@ -856,7 +864,11 @@ def _doctor_payload(host: str | None) -> dict[str, Any]:
     warnings: list[str] = []
     if version_skew:
         warnings.append("stackmarshal_version_skew")
-    if len(path_candidates) > 1:
+    launcher_directories = {
+        _normalized_path(Path(str(candidate["path"])).parent)
+        for candidate in path_candidates
+    }
+    if len(launcher_directories) > 1:
         warnings.append("multiple_stackmarshal_launchers_on_path")
     if shadowed_versions - authoritative_versions:
         warnings.append("shadowed_stackmarshal_versions")
@@ -1336,6 +1348,60 @@ def cmd_invocation(args: argparse.Namespace) -> int:
     return 0 if triggered else EXIT_INVALID_INPUT
 
 
+def cmd_relocate_prepare(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    require_no_pending_plan(root)
+    _path, state = _find_state(root, args.run_id)
+    permit = prepare_relocation(root, state, Path(args.to))
+    _json(
+        {
+            "prepared": True,
+            "permit_id": permit["permit_id"],
+            "run_id": state.run_id,
+            "from_root": permit["from_root"],
+            "to_root": permit["to_root"],
+            "workspace_fingerprint": permit["workspace_fingerprint"],
+            "next_action": "Move the workspace without changing its contents, then run relocate accept from the destination root.",
+        }
+    )
+    return 0
+
+
+def cmd_relocate_accept(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    path, state = _find_state(root, args.run_id)
+    permit = load_relocation_permit(root, args.permit_id)
+    checkpoint_path = path.with_name("checkpoint.json")
+    migrated_checkpoint = migrate_checkpoint_for_relocation(root, state, permit, checkpoint_path)
+    migration = accept_relocation(root, state, permit)
+    save_state(state, path)
+    append_event(path.with_name("events.jsonl"), "project_identity_migrated", state.phase, migration)
+    if migrated_checkpoint is not None:
+        workspace_write_text(
+            checkpoint_path,
+            json.dumps(migrated_checkpoint, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        checkpoint_markdown = path.with_name("checkpoint.md")
+        if workspace_exists(checkpoint_markdown):
+            markdown = workspace_read_text(checkpoint_markdown, encoding="utf-8")
+            old_root = str(permit["from_root"])
+            new_root = str(root.resolve())
+            markdown = markdown.replace(f"- Project: `{old_root}`", f"- Project: `{new_root}`", 1)
+            workspace_write_text(checkpoint_markdown, markdown, encoding="utf-8")
+    _json(
+        {
+            "accepted": True,
+            "permit_id": args.permit_id,
+            "run_id": state.run_id,
+            "project_root": state.project.root,
+            "project_identity": state.project.identity_hash,
+            "reason": "workspace_relocation",
+        }
+    )
+    return 0
+
+
 def cmd_host_write_status(args: argparse.Namespace) -> int:
     _json(pending_status(_root(args.root)))
     return 0
@@ -1358,6 +1424,11 @@ def cmd_host_write_abort(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_host_write_recover(args: argparse.Namespace) -> int:
+    _json(recover_pending_plan(_root(args.root), args.plan_id, args.path))
+    return 0
+
+
 def _host_plannable(args: argparse.Namespace) -> bool:
     if args.command in {"init", "start", "activity", "stop", "report", "audit", "finalize"}:
         return True
@@ -1369,7 +1440,15 @@ def _host_plannable(args: argparse.Namespace) -> bool:
         return bool(args.checkpoint_command == "create")
     if args.command == "resume":
         return bool(args.target != "inspect")
+    if args.command == "relocate":
+        return bool(args.relocate_command == "accept")
     return False
+
+
+def _project_mutating(args: argparse.Namespace) -> bool:
+    if _host_plannable(args):
+        return True
+    return bool(args.command == "migrate" and not args.dry_run)
 
 
 def _run_host_planned_command(
@@ -1408,8 +1487,8 @@ def _run_host_planned_command(
                 "command_result": result,
                 "plan": plan,
                 "next_action": (
-                    "Apply each signed write_text operation through the host file API using exact "
-                    "preimage replacement when expected_preimage is present, then run host-write ack."
+                    "Apply the signed operations through the host file API using their preimage/CAS contract, "
+                    "then run host-write ack. host-write check remains available as a diagnostic preflight."
                 ),
             },
             indent=2,
@@ -1580,6 +1659,17 @@ def build_parser() -> argparse.ArgumentParser:
     invocation.add_argument("text")
     invocation.set_defaults(func=cmd_invocation)
 
+    relocate = sub.add_parser("relocate")
+    relocate_sub = relocate.add_subparsers(dest="relocate_command", required=True)
+    relocate_prepare = relocate_sub.add_parser("prepare")
+    relocate_prepare.add_argument("--to", required=True)
+    relocate_prepare.add_argument("--run-id")
+    relocate_prepare.set_defaults(func=cmd_relocate_prepare)
+    relocate_accept = relocate_sub.add_parser("accept")
+    relocate_accept.add_argument("--permit-id", required=True)
+    relocate_accept.add_argument("--run-id")
+    relocate_accept.set_defaults(func=cmd_relocate_accept)
+
     host_write = sub.add_parser("host-write")
     host_write_sub = host_write.add_subparsers(dest="host_write_command", required=True)
     host_status = host_write_sub.add_parser("status")
@@ -1594,6 +1684,10 @@ def build_parser() -> argparse.ArgumentParser:
     host_abort.add_argument("--plan-id", required=True)
     host_abort.add_argument("--reason", required=True)
     host_abort.set_defaults(func=cmd_host_write_abort)
+    host_recover = host_write_sub.add_parser("recover")
+    host_recover.add_argument("--plan-id", required=True)
+    host_recover.add_argument("--path")
+    host_recover.set_defaults(func=cmd_host_write_recover)
 
     pin = sub.add_parser("pin")
     pin.add_argument("target", nargs="?", default="status", help="status, latest, or vMAJOR.MINOR.PATCH")
@@ -1629,6 +1723,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = parser.parse_args(raw_argv)
         func: Callable[[argparse.Namespace], int] = args.func
+        if args.command != "host-write" and _project_mutating(args):
+            require_no_pending_plan(_root(args.root))
         if args.write_mode == "host":
             if args.command == "migrate" and not args.dry_run:
                 raise HostWriteError(
@@ -1647,6 +1743,7 @@ def main(argv: list[str] | None = None) -> int:
         PinError,
         MigrationError,
         HostWriteError,
+        RelocationError,
     ) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return EXIT_INVALID_INPUT

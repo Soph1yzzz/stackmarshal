@@ -20,7 +20,7 @@
     "integrity_hmac_sha256"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"enum": ["1.0", "1.1"]},
     "record_type": {"const": "host_write_plan"},
     "plan_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
     "created_at": {"type": "string"},
@@ -38,27 +38,54 @@
       "type": "array",
       "minItems": 1,
       "items": {
-        "type": "object",
-        "required": [
-          "operation",
-          "path",
-          "expected_preimage_sha256",
-          "expected_preimage",
-          "content_sha256",
-          "content"
-        ],
-        "properties": {
-          "operation": {"const": "write_text"},
-          "path": {"type": "string", "minLength": 1, "pattern": "^[^\\\\:]+$"},
-          "expected_preimage_sha256": {
-            "type": ["string", "null"],
-            "pattern": "^[a-f0-9]{64}$"
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "operation",
+              "path",
+              "expected_preimage_sha256",
+              "expected_preimage",
+              "content_sha256",
+              "content"
+            ],
+            "properties": {
+              "operation": {"const": "write_text"},
+              "path": {"type": "string", "minLength": 1, "pattern": "^[^\\\\:]+$"},
+              "expected_preimage_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+              "expected_preimage": {"type": ["string", "null"]},
+              "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "content": {"type": "string"}
+            },
+            "additionalProperties": false
           },
-          "expected_preimage": {"type": ["string", "null"]},
-          "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-          "content": {"type": "string"}
-        },
-        "additionalProperties": false
+          {
+            "type": "object",
+            "required": [
+              "operation",
+              "path",
+              "expected_preimage_sha256",
+              "expected_preimage_size",
+              "expected_tail",
+              "append_sha256",
+              "append_content",
+              "content_sha256",
+              "preimage_blob_sha256"
+            ],
+            "properties": {
+              "operation": {"const": "append_text"},
+              "path": {"type": "string", "minLength": 1, "pattern": "^[^\\\\:]+$"},
+              "expected_preimage_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+              "expected_preimage_size": {"type": "integer", "minimum": 0},
+              "expected_tail": {"type": ["string", "null"], "maxLength": 512},
+              "append_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "append_content": {"type": "string"},
+              "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "preimage_blob_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+            },
+            "additionalProperties": false
+          }
+        ]
       }
     },
     "integrity_algorithm": {"const": "hmac-sha256-v1"},

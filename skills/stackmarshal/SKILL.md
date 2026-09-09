@@ -8,7 +8,7 @@ description: >
   "使用 StackMarshal 实现", or "$stackmarshal". Do not use for ordinary coding
   requests, explanations, comparisons, or text edits that merely mention the name.
 metadata:
-  version: "1.2.0"
+  version: "1.2.1"
 ---
 
 # StackMarshal
@@ -20,7 +20,7 @@ convergence: either `COMPLETE` with evidence or a formal, resumable stop.
 
 Before any work, verify host readiness and invocation in this order:
 
-1. Run `python scripts/stackmarshal_core.py host-ready --version "1.2.0"`.
+1. Run `python scripts/stackmarshal_core.py host-ready --version "1.2.1"`.
    The installer leaves a restart-pending marker outside the Skill directory. Only a
    matching newly loaded Skill may acknowledge and clear it. If this command reports
    `ready: false`, stop with `INVALID_STATE` and require a Codex restart.
@@ -31,7 +31,7 @@ Before any work, verify host readiness and invocation in this order:
    is not triggered, stop this skill and answer normally. A stale pre-restart Skill
    still invokes the replaced on-disk fallback; while the marker exists, that fallback
    refuses invocation with `restart_required` instead of silently emulating the new Skill.
-4. Run `stackmarshal doctor --host-skill-version "1.2.0"` before project work. A Skill,
+4. Run `stackmarshal doctor --host-skill-version "1.2.1"` before project work. A Skill,
    CLI, or host-version mismatch is `INVALID_STATE`.
 
 Never infer invocation from an ordinary coding request. Never invoke StackMarshal recursively.
@@ -63,23 +63,34 @@ stop `INVALID_STATE`; do not pretend the run was fully dogfooded.
 1. Invoke the same StackMarshal command with `--write-mode host`, for example
    `stackmarshal --write-mode host init`. Core computes the mutation but does not write
    project files; it stores a user-local pending record and returns an HMAC-signed plan.
-2. Run `stackmarshal host-write check --plan-id <id>`. Do not apply a plan whose
-   expected preimage check fails.
-3. Apply each `write_text` operation only through the host file API. Honor the plan's
-   `required_directories`; if the host write primitive creates parents implicitly, that satisfies
-   the requirement. When `expected_preimage` is present, use the host's exact edit/replace primitive
-   with that full preimage as the compare-and-swap guard. When it is null, confirm the target is
-   absent and create it with the host write primitive. Never materialize the plan with
-   shell redirection, Python, `tee`, or another forbidden project-writing path.
-4. Run `stackmarshal host-write ack --plan-id <id>`. Core verifies every postimage hash
-   before the plan is acknowledged. Never issue the next mutating StackMarshal command
-   while a plan is pending. Use `host-write abort` only for an intentionally abandoned
-   unapplied plan.
+2. Apply the plan through the host's native file API. `write_text` operations use the
+   signed exact preimage as the compare-and-swap guard. `append_text` operations carry
+   only the append delta plus a signed whole-file SHA/size and a short `expected_tail`;
+   on DevSpace, use that tail as exact `oldText` and `expected_tail + append_content` as
+   `newText`. Honor `required_directories`. Never materialize project state with shell
+   redirection, Python, `tee`, or another forbidden project-writing path.
+3. Use `stackmarshal host-write check --plan-id <id>` when the host primitive cannot
+   itself enforce the signed preimage contract, or whenever recovery/diagnosis is needed.
+   It remains a recommended preflight for append-only hosts without full-file CAS.
+4. Run `stackmarshal host-write ack --plan-id <id>` once after all operations are applied.
+   Core hashes every postimage before acknowledgement. The pending slot is exclusive and
+   blocks every project mutation in both direct and host modes until ACK/abort.
+5. If a file was changed accidentally, use `stackmarshal host-write recover --plan-id <id>`
+   (optionally `--path <relative-path>`) to retrieve the signed preimage through the control
+   plane, restore it only with the host file API, then retry the plan.
+
+Apply independent operations from one plan together when the host supports batching, but
+do not claim multi-file atomicity if the host API does not provide it. Current DevSpace
+file tools are per-file; StackMarshal therefore automates the protocol without pretending
+that those writes form an atomic filesystem transaction.
 
 The direct and host paths share the same Core state machine, HMAC authority, budgets,
 acceptance gates, checkpoint rules, and finalization semantics; only the write transport
-differs. `migrate` is not host-write plannable in v1.2.0, and managed-install `pin` / `repair`
-remain outside the project HostWriteAdapter.
+differs. `migrate` is not host-write plannable in v1.2.1, and managed-install `pin` / `repair`
+remain outside the project HostWriteAdapter. For an intentional workspace move, create a
+signed permit with `stackmarshal relocate prepare --to <new-root>` before moving, then use
+`relocate accept` at the destination (with `--write-mode host` on shell-write-restricted hosts).
+Relocation and repository bootstrap are recorded as distinct identity migrations.
 
 Run `stackmarshal init`, then create exactly one authoritative
 run with `stackmarshal start`. Reuse that run ID until it reaches a terminal state;

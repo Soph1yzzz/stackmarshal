@@ -439,6 +439,15 @@ def test_deferred_windows_cleanup_accepts_same_version_swap_backup(tmp_path: Pat
         )
 
 
+def test_windows_shell_launcher_targets_managed_windows_venv() -> None:
+    installer = _load_installer()
+    name, text = installer.windows_shell_launcher_text("1.2.1")  # type: ignore[attr-defined]
+    assert name == "stackmarshal"
+    assert text.startswith("#!/bin/sh\n")
+    assert "../versions/v1.2.1/venv/Scripts/python.exe" in text
+    assert '"$@"' in text
+
+
 def test_deferred_cleanup_schedule_uses_new_version_python(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

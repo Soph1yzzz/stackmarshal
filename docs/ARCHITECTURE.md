@@ -12,18 +12,30 @@ reasoning and implementation through an `AgentAdapter`; v1 provides a Codex envi
 adapter. Discovery, acquisition, and workspace mutation are protocol boundaries so future
 Agent adapters can reuse state and policy without changing the deterministic state machine.
 
-Workspace mutation now has two transports. `DirectFilesystemWriter` preserves the existing
-CLI-owned atomic write path for normal Codex/CLI operation. `HostPlanWorkspaceWriter` is used only
-when a host prohibits shell-side project mutation but provides a native file API. In that mode Core
-simulates the same mutation semantics in memory, emits an HMAC-authenticated write plan outside the
-project, and requires the host to apply canonical contained targets through its own write/edit API.
-Each operation carries an expected preimage and required postimage SHA-256. A separate
-`host-write ack` verifies the actual postimages before clearing the pending plan; no later project
-mutation is accepted while a plan remains pending.
+Workspace mutation has two transports. `DirectFilesystemWriter` preserves the existing CLI-owned
+atomic write path for normal Codex/CLI operation. `HostPlanWorkspaceWriter` is used only when a host
+prohibits shell-side project mutation but provides a native file API. In that mode Core simulates the
+same mutation semantics in memory, emits an HMAC-authenticated write plan outside the project, and
+requires the host to apply canonical contained targets through its own write/edit API.
+
+HostWrite schema 1.1 has two mutation shapes. `write_text` keeps the exact UTF-8 preimage plus its
+SHA-256. `append_text`, used for growing evidence such as `events.jsonl`, carries the whole-file
+preimage SHA-256/size, at most 512 characters of signed tail, only the appended bytes, and the final
+whole-file SHA-256. The previous full append preimage is retained as a content-addressed user-local
+recovery blob instead of being copied into each plan. A separate `host-write ack` always verifies the
+actual final postimages before clearing the pending plan.
+
+The single pending-plan slot is a Core admission invariant, not a host-mode convention. Project
+mutations in either direct or host mode are rejected while a plan is pending, and the pending record
+is created with exclusive filesystem semantics so concurrent producers cannot replace it. Host
+adapters may batch operations when their native API supports that capability, but StackMarshal does
+not claim multi-file atomicity for per-file APIs such as the current DevSpace write/edit interface.
+See [HOST_WRITE_ADAPTER.md](HOST_WRITE_ADAPTER.md).
 
 Project decisions live in `.stackmarshal/project/`; ephemeral runs live in
-`.stackmarshal/runs/<run-id>/`. The shared integrity signing key and pending host-write plans/receipts
-live in the user's external StackMarshal state directory, never in the repository. Canonical `run.json` and `task-graph.json`
+`.stackmarshal/runs/<run-id>/`. The shared integrity signing key, pending host-write plans/receipts,
+content-addressed HostWrite recovery blobs, and workspace-relocation permits live in the user's
+external StackMarshal state directory, never in the repository. Canonical `run.json` and `task-graph.json`
 are authenticated before they are accepted as execution/completion authority. Events are
 append-only JSONL. Architecture is frozen before task execution, and a post-freeze architecture or
 task-plan change requires a decision record. Verification-only fixes use a separate bounded
@@ -31,9 +43,13 @@ task-plan change requires a decision record. Verification-only fixes use a separ
 
 A formal checkpoint records a signed resume phase. Explicitly resumable terminal states can return
 the same run id to `RUNNING` only after checkpoint HMAC, project identity, Git/dirty state, and exact
-Git or non-Git worktree fingerprint validation. Legacy unsigned run/task records are never converted
-into trusted live authority; migration archives their original bytes with SHA-256 evidence and starts
-fresh signed authority instead.
+Git or non-Git worktree fingerprint validation. Intentional workspace relocation uses a separate
+signed pre-move permit containing the deliverable fingerprint, portable repository identity, HEAD and
+dirty state. `relocate accept` migrates the run (and any signed checkpoint) only if those facts remain
+unchanged, recording `workspace_relocation`; a later `git init` remains the distinct
+`workspace_repository_bootstrap` migration. Legacy unsigned run/task records are never converted into
+trusted live authority; migration archives their original bytes with SHA-256 evidence and starts fresh
+signed authority instead.
 
 Build-mode terminal success uses a two-step integrity boundary. `stackmarshal finalize` runs while
 VERIFICATION is still active, regenerates StackMarshal-owned project bookkeeping, and seals the

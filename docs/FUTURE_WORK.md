@@ -1,6 +1,6 @@
 # Future Work
 
-Items intentionally outside the v1.2.0 host-write transport scope:
+Items intentionally outside the v1.2.1 HostWrite ergonomics/correctness scope:
 
 - Claude Code, Gemini CLI, Cline, GitHub Copilot, and OpenHands adapters.
 - Multi-agent research/build/review orchestration.
@@ -39,14 +39,20 @@ The next intended sequencing is:
   - bind each mutation to canonical contained paths plus expected preimage and required postimage SHA-256 values,
   - serialize project mutations while a host-write plan is pending,
   - extend Windows installer cleanup to stale same-version swap backups exposed by repair dogfood.
-- **v1.2.1 — Operator UX / fully non-invasive operation**
+- **v1.2.1 — HostWrite ergonomics / transaction hardening**
+  - enforce the pending-plan invariant at project-mutation admission in both direct and host modes, plus exclusive pending-slot creation,
+  - replace growing `events.jsonl` full-file plans with compact append/CAS operations and content-addressed recovery preimages,
+  - add `host-write recover` and a signed-tail DevSpace edit path without pretending per-file host APIs are multi-file atomic,
+  - add signed fingerprint-preserving workspace relocation as a distinct identity migration from repository bootstrap,
+  - add a managed extensionless Windows shell shim so bare `stackmarshal` works from Git Bash without creating doctor alias noise.
+- **v1.2.2 — Operator UX / fully non-invasive operation**
   - repository-external/local initialization mode beyond the v1.1.5 existing-ignore optimization,
   - separate environment inventory from delivery-quality audit,
   - compact human CLI output with explicit full JSON mode,
   - make actionable shadowed-launcher cleanup guidance visible directly in doctor output.
-- **v1.2.2 — Claude Code adapter**
-- **v1.2.3 — Gemini CLI adapter**
-- **v1.2.4 — Adapter conformance polish**
+- **v1.2.3 — Claude Code adapter**
+- **v1.2.4 — Gemini CLI adapter**
+- **v1.2.5 — Adapter conformance polish**
 - **v1.3.0 — Multi-agent orchestration**
 - **v1.4.0 — Signed provenance**
 - **v2.0.0 — schema/migrations-class changes**

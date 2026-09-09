@@ -77,17 +77,17 @@ workspaceにはignoredな0 byte artifact `NUL`が存在し、workspace fingerpri
 
 現行`stackmarshal init`はStackMarshal run state用patternをproject `.gitignore`へ追加します。現在の設計としては意図的ですが、orchestrator bookkeepingだけでtarget repoをdirtyにしたくない運用が実使用で確認されました。
 
-これは当初v1.1.4、その後pin/version scope決定でv1.1.5へ移動しました。v1.1.5では実害が確認できた「Git側ですでにignore済みなら`.gitignore`を触らない」部分だけ先に修正し、repo外stateを含む完全なlocal / non-invasive initは当時v1.1.6へ移動しました。その後v1.1.6 cleanup hotfixとv1.2.0 HostWriteAdapterが先行したため、未実装のoperator UX scopeは現在v1.2.1です。
+これは当初v1.1.4、その後pin/version scope決定でv1.1.5へ移動しました。v1.1.5では実害が確認できた「Git側ですでにignore済みなら`.gitignore`を触らない」部分だけ先に修正し、repo外stateを含む完全なlocal / non-invasive initは当時v1.1.6へ移動しました。その後v1.1.6 cleanup hotfixとv1.2.0 HostWriteAdapterが先行してv1.2.1へ移りましたが、ChromeBridge dogfoodでHostWriteのtransaction/transport課題を優先したため、現在はv1.2.2予定です。
 
 ### 5. `audit`はdelivery auditではなくenvironment inventory
 
 現行`stackmarshal audit`はenvironmentとnative capability inventoryを生成します。field reportでは、changed files、mandatory task acceptance/evidence、verification freshness、unresolved failures、finalize readinessを横断する最終reviewを期待していました。
 
-より広いdelivery reviewは当初v1.1.4、その後v1.1.5へ移動しましたが、後続dogfoodで優先度の高いrecovery defectが見つかったため、内容を変えず当時v1.1.6へ移動しました。現在はv1.1.6 cleanup hotfixとv1.2.0 host-write transportを経てv1.2.1にあります。既存environment auditは有用なので、暗黙に意味を変えるのではなくscopeを明示的に分離する方針です。
+より広いdelivery reviewは当初v1.1.4、その後v1.1.5へ移動しましたが、後続dogfoodで優先度の高いrecovery defectが見つかったため、内容を変えず当時v1.1.6へ移動しました。その後v1.2.0 host-write transportを経てv1.2.1へ移りましたが、ChromeBridge dogfoodでHostWriteの実運用課題を優先したため、現在はv1.2.2予定です。既存environment auditは有用なので、暗黙に意味を変えるのではなくscopeを明示的に分離する方針です。
 
 ### 6. Human CLIとしては出力がverbose
 
-phase transition時にfull run JSONが出るため、machine outputとしては強い一方、interactive terminalでは流量が多いという指摘がありました。compact human default + 明示的full JSON modeは当初v1.1.4、その後v1.1.5へ移動しましたが、recovery correctnessをv1.1.5へ優先したため当時roadmapではv1.1.6でした。現在は同じscopeのままv1.2.1です。
+phase transition時にfull run JSONが出るため、machine outputとしては強い一方、interactive terminalでは流量が多いという指摘がありました。compact human default + 明示的full JSON modeは当初v1.1.4、その後v1.1.5へ移動しましたが、recovery correctnessをv1.1.5へ優先したため当時roadmapではv1.1.6でした。その後v1.2.1へ移り、ChromeBridge HostWrite dogfoodを優先したため現在はv1.2.2予定です。
 
 ## v1.1.3への反映
 
@@ -97,7 +97,7 @@ Case Study #2からv1.1.3のruntime-trust hardening scopeを次の3点に固定�
 2. `doctor`でlauncher / CLI / Skill / managed installのversion skewを検出・可視化する。
 3. Windows予約device名をworkspace fingerprintで専用診断し、fail-closed evidence semanticsを維持する。
 
-repo非侵襲init、delivery audit、compact CLI outputはv1.1.3から分離しました。当初v1.1.4、次にv1.1.5へ移動しましたが、後続dogfoodでrecovery correctnessをv1.1.5へ昇格したため、残るoperator UX scopeは当時v1.1.6へ移動しました。v1.1.5ではこのcase-study系から既存ignore尊重の局所修正だけ先行し、その後v1.1.6 cleanupとv1.2.0 host-write transportが優先されたため現在はv1.2.1です。
+repo非侵襲init、delivery audit、compact CLI outputはv1.1.3から分離しました。当初v1.1.4、次にv1.1.5へ移動しましたが、後続dogfoodでrecovery correctnessをv1.1.5へ昇格したため、残るoperator UX scopeは当時v1.1.6へ移動しました。v1.1.5ではこのcase-study系から既存ignore尊重の局所修正だけ先行し、その後v1.1.6 cleanupとv1.2.0 host-write transportでv1.2.1へ移りました。ChromeBridge HostWrite dogfoodをv1.2.1で優先したため、現在はv1.2.2予定です。
 
 その後のpre-release security reviewで、このfield run由来ではない4件目のv1.1.3 trust issueも見つかりました。checkpointとacquisition receiptにはユーザー領域integrity認証がある一方、live runとcanonical task authorityには同等の保護がありませんでした。v1.1.3ではこの差も閉じています。field runが発見したと後付けしないため、この内容は後日談として分離して記録します。
 

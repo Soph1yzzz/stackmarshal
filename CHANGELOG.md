@@ -2,6 +2,28 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
+## [1.2.1] - 2026-09-09
+
+### Added
+
+- Add compact `append_text` HostWrite operations for growing evidence such as `events.jsonl`, with whole-file preimage SHA/size, a signed tail CAS guard, append-only payload, and final postimage SHA-256.
+- Add content-addressed user-local recovery preimages and `stackmarshal host-write recover` for restoring a signed preimage through the host file API after an accidental mutation.
+- Add signed workspace relocation with `relocate prepare` / `relocate accept`; relocation is fingerprint-bound and recorded separately from repository bootstrap.
+- Add an extensionless managed Windows shell shim so Git Bash can invoke bare `stackmarshal` alongside the authoritative `.cmd` launcher.
+- Document the HostWriteAdapter transport contract, including the DevSpace exact-tail edit path and the fact that current per-file host APIs are not multi-file atomic.
+
+### Fixed
+
+- Enforce the pending-plan invariant before every project-mutating command in both direct and host modes, not only inside the HostWrite path.
+- Create the pending slot with exclusive filesystem creation so concurrent plan producers cannot replace an unacknowledged transaction.
+- Keep co-located managed Windows `.cmd` and Git Bash shims in one launcher family so doctor does not report a false multiple-launcher warning.
+- Preserve the same run across intentional workspace moves only after a signed pre-move permit and matching post-move fingerprint/repository identity prove the relocation.
+
+### Changed
+
+- Keep normal Codex/CLI direct-write behavior unchanged; v1.2.1 is a HostWrite ergonomics/correctness release rather than a second state machine.
+- Move the previously planned operator UX / fully non-invasive state-placement work to v1.2.2, Claude Code adapter work to v1.2.3, Gemini CLI to v1.2.4, and adapter conformance polish to v1.2.5.
+
 ## [1.2.0] - 2026-09-07
 
 ### Added

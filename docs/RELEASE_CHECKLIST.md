@@ -1,4 +1,4 @@
-# v1.1 Release Checklist
+# StackMarshal Release Checklist
 
 ## Product and behavior
 
@@ -11,7 +11,10 @@
 - [x] formal stop states with checkpoint generation
 - [x] repository-lineage identity, Git HEAD, dirty-state, exact Git/non-Git worktree fingerprint, signed resume phase, and user-local HMAC checks on same-run resume
 - [x] direct filesystem mutation remains the default; host-write mode emits signed canonical mutation plans and requires pre/postimage verification before ack
-- [x] pending host-write plans serialize later project mutation and cannot grant phase/completion authority
+- [x] pending host-write plans serialize every later project mutation in both direct and host modes, use exclusive pending-slot creation, and cannot grant phase/completion authority
+- [x] append-only HostWrite evidence uses bounded append/CAS payloads with whole-file pre/postimage verification and signed-tail host edit guards
+- [x] pending HostWrite preimages are recoverable only through user-local signed recovery evidence; recovery does not silently mutate the project
+- [x] intentional workspace relocation requires a signed pre-move permit plus matching post-move fingerprint/repository identity and remains distinct from Git bootstrap
 - [x] bounded VERIFICATION/CORRECTION/VERIFICATION lane that does not consume architecture-replan budget
 - [x] legacy unsigned state is archived with hashes without being promoted into signed authority
 
@@ -31,6 +34,7 @@
 - [x] post-install doctor and ignored isolated installation audit
 - [x] explicit managed repair plus high-confidence-only optional shadowed-launcher removal
 - [x] Windows deferred cleanup covers both old managed version directories and installer-created same-version swap backups
+- [x] Windows installs provide the authoritative `.cmd` launcher plus a co-located extensionless Git Bash shim without false doctor multi-launcher warnings
 - [x] Windows self-update old-version cleanup defers only lock errors and retries from the newly installed venv after updater exit
 
 ## Quality

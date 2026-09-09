@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from contextlib import suppress
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import uuid
 from typing import Any
@@ -15,7 +17,8 @@ class HostWriteError(RuntimeError):
     pass
 
 
-PLAN_SCHEMA_VERSION = "1.0"
+PLAN_SCHEMA_VERSION = "1.1"
+SUPPORTED_PLAN_SCHEMA_VERSIONS = {"1.0", PLAN_SCHEMA_VERSION}
 
 
 def _normalized_root_key(root: Path) -> str:
@@ -40,11 +43,67 @@ def receipt_path(root: Path, plan_id: str) -> Path:
     return _host_write_home(root) / "receipts" / f"{plan_id}.json"
 
 
+def _blob_path(root: Path, digest: str) -> Path:
+    if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+        raise HostWriteError("Invalid host-write blob digest")
+    return _host_write_home(root) / "blobs" / f"{digest}.txt"
+
+
+def _store_recovery_blobs(root: Path, writer: HostPlanWorkspaceWriter) -> None:
+    for _relative, preimage in writer.recovery_preimages().items():
+        payload = preimage.encode("utf-8")
+        digest = hashlib.sha256(payload).hexdigest()
+        destination = _blob_path(root, digest)
+        if destination.exists():
+            if destination.read_bytes() != payload:
+                raise HostWriteError("Host-write recovery blob hash collision or corruption")
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")
+        temporary.write_bytes(payload)
+        temporary.replace(destination)
+
+
+def _load_recovery_blob(root: Path, digest: str) -> str:
+    path = _blob_path(root, digest)
+    try:
+        payload = path.read_bytes()
+    except OSError as exc:
+        raise HostWriteError(f"Host-write recovery blob is unavailable: {digest}") from exc
+    if hashlib.sha256(payload).hexdigest() != digest:
+        raise HostWriteError(f"Host-write recovery blob failed hash validation: {digest}")
+    try:
+        return payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HostWriteError(f"Host-write recovery blob is not UTF-8 text: {digest}") from exc
+
+
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     temporary.replace(path)
+
+
+def _create_pending_json_exclusive(path: Path, payload: dict[str, Any]) -> None:
+    """Create the single pending slot without any replace/overwrite race."""
+
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    data = (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    try:
+        descriptor = os.open(path, flags, 0o600)
+    except FileExistsError as exc:
+        raise HostWriteError("A host-write plan became pending concurrently; the new plan was not stored") from exc
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except Exception:
+        with suppress(OSError):
+            path.unlink()
+        raise
 
 
 def _load_signed_json(path: Path) -> dict[str, Any]:
@@ -93,6 +152,7 @@ def create_pending_plan(
     if not operations:
         return None
     require_no_pending_plan(root)
+    _store_recovery_blobs(root, writer)
     current_project = project_info(root)
     plan_id = uuid.uuid4().hex
     plan = sign_record(
@@ -110,12 +170,12 @@ def create_pending_plan(
             "operations": operations,
         }
     )
-    _atomic_write_json(pending_plan_path(root), plan)
+    _create_pending_json_exclusive(pending_plan_path(root), plan)
     return plan
 
 
 def _validate_plan_identity(root: Path, plan: dict[str, Any]) -> None:
-    if plan.get("schema_version") != PLAN_SCHEMA_VERSION or plan.get("record_type") != "host_write_plan":
+    if plan.get("schema_version") not in SUPPORTED_PLAN_SCHEMA_VERSIONS or plan.get("record_type") != "host_write_plan":
         raise HostWriteError("Unsupported host-write plan schema")
     if plan.get("project_root") != str(root.resolve()):
         raise HostWriteError("Host-write plan belongs to a different workspace root")
@@ -129,28 +189,60 @@ def _validate_plan_identity(root: Path, plan: dict[str, Any]) -> None:
         raise HostWriteError("Host-write plan has no operations")
     seen: set[str] = set()
     for raw in operations:
-        if not isinstance(raw, dict) or raw.get("operation") != "write_text":
+        if not isinstance(raw, dict):
             raise HostWriteError("Host-write plan contains an unsupported operation")
+        operation = raw.get("operation")
         relative = raw.get("path")
-        content = raw.get("content")
         content_hash = raw.get("content_sha256")
-        preimage = raw.get("expected_preimage")
         preimage_hash = raw.get("expected_preimage_sha256")
-        if not isinstance(relative, str) or not isinstance(content, str) or not isinstance(content_hash, str):
+        if not isinstance(relative, str) or not isinstance(content_hash, str):
             raise HostWriteError("Host-write plan contains an invalid text operation")
         _validate_relative_path(relative)
         if relative in seen:
             raise HostWriteError(f"Host-write plan contains duplicate target: {relative}")
         seen.add(relative)
-        if hashlib.sha256(content.encode("utf-8")).hexdigest() != content_hash:
-            raise HostWriteError(f"Host-write content hash is inconsistent: {relative}")
-        if preimage is None:
-            if preimage_hash is not None:
-                raise HostWriteError(f"Host-write absent preimage has a hash: {relative}")
-        elif not isinstance(preimage, str) or not isinstance(preimage_hash, str):
-            raise HostWriteError(f"Host-write preimage contract is invalid: {relative}")
-        elif hashlib.sha256(preimage.encode("utf-8")).hexdigest() != preimage_hash:
-            raise HostWriteError(f"Host-write preimage hash is inconsistent: {relative}")
+        if operation == "write_text":
+            content = raw.get("content")
+            preimage = raw.get("expected_preimage")
+            if not isinstance(content, str):
+                raise HostWriteError("Host-write plan contains an invalid text operation")
+            if hashlib.sha256(content.encode("utf-8")).hexdigest() != content_hash:
+                raise HostWriteError(f"Host-write content hash is inconsistent: {relative}")
+            if preimage is None:
+                if preimage_hash is not None:
+                    raise HostWriteError(f"Host-write absent preimage has a hash: {relative}")
+            elif not isinstance(preimage, str) or not isinstance(preimage_hash, str):
+                raise HostWriteError(f"Host-write preimage contract is invalid: {relative}")
+            elif hashlib.sha256(preimage.encode("utf-8")).hexdigest() != preimage_hash:
+                raise HostWriteError(f"Host-write preimage hash is inconsistent: {relative}")
+            continue
+        if operation == "append_text":
+            append_content = raw.get("append_content")
+            append_hash = raw.get("append_sha256")
+            preimage_size = raw.get("expected_preimage_size")
+            expected_tail = raw.get("expected_tail")
+            blob_hash = raw.get("preimage_blob_sha256")
+            if not isinstance(append_content, str) or not isinstance(append_hash, str) or not isinstance(preimage_size, int):
+                raise HostWriteError("Host-write plan contains an invalid append operation")
+            if hashlib.sha256(append_content.encode("utf-8")).hexdigest() != append_hash:
+                raise HostWriteError(f"Host-write append hash is inconsistent: {relative}")
+            if preimage_hash is None:
+                if preimage_size != 0 or blob_hash is not None or expected_tail is not None:
+                    raise HostWriteError(f"Host-write absent append preimage is inconsistent: {relative}")
+                if hashlib.sha256(append_content.encode("utf-8")).hexdigest() != content_hash:
+                    raise HostWriteError(f"Host-write append postimage hash is inconsistent: {relative}")
+            else:
+                if not isinstance(preimage_hash, str) or blob_hash != preimage_hash:
+                    raise HostWriteError(f"Host-write append preimage contract is invalid: {relative}")
+                preimage = _load_recovery_blob(root, preimage_hash)
+                if len(preimage.encode("utf-8")) != preimage_size:
+                    raise HostWriteError(f"Host-write append preimage size is inconsistent: {relative}")
+                if not isinstance(expected_tail, str) or not preimage.endswith(expected_tail) or len(expected_tail) > 512:
+                    raise HostWriteError(f"Host-write append tail contract is invalid: {relative}")
+                if hashlib.sha256((preimage + append_content).encode("utf-8")).hexdigest() != content_hash:
+                    raise HostWriteError(f"Host-write append postimage hash is inconsistent: {relative}")
+            continue
+        raise HostWriteError("Host-write plan contains an unsupported operation")
 
 
 def _validate_relative_path(relative: str) -> None:
@@ -199,7 +291,7 @@ def check_pending_plan(root: Path, plan_id: str) -> dict[str, Any]:
         raise HostWriteError("Pending host-write plan id does not match")
     errors: list[str] = []
     for raw in plan["operations"]:
-        if not isinstance(raw, dict) or raw.get("operation") != "write_text":
+        if not isinstance(raw, dict) or raw.get("operation") not in {"write_text", "append_text"}:
             errors.append("unsupported_operation")
             continue
         relative = raw.get("path")
@@ -239,7 +331,7 @@ def acknowledge_pending_plan(root: Path, plan_id: str) -> dict[str, Any]:
     errors: list[str] = []
     verified: list[dict[str, str]] = []
     for raw in plan["operations"]:
-        if not isinstance(raw, dict) or raw.get("operation") != "write_text":
+        if not isinstance(raw, dict) or raw.get("operation") not in {"write_text", "append_text"}:
             errors.append("unsupported_operation")
             continue
         relative = raw.get("path")
@@ -281,6 +373,46 @@ def acknowledge_pending_plan(root: Path, plan_id: str) -> dict[str, Any]:
         "plan_id": plan_id,
         "receipt": str(destination),
         "verified_postimages": verified,
+    }
+
+
+def recover_pending_plan(root: Path, plan_id: str, relative_path: str | None = None) -> dict[str, Any]:
+    plan = load_pending_plan(root)
+    if plan is None:
+        raise HostWriteError("No host-write plan is pending")
+    if plan.get("plan_id") != plan_id:
+        raise HostWriteError("Pending host-write plan id does not match")
+    recovery: list[dict[str, Any]] = []
+    for raw in plan["operations"]:
+        if not isinstance(raw, dict):
+            continue
+        relative = raw.get("path")
+        if not isinstance(relative, str) or (relative_path is not None and relative != relative_path):
+            continue
+        _validate_relative_path(relative)
+        expected = raw.get("expected_preimage_sha256")
+        if expected is None:
+            recovery.append({"path": relative, "expected_absent": True, "content": None, "sha256": None})
+            continue
+        if raw.get("operation") == "write_text":
+            content = raw.get("expected_preimage")
+            if not isinstance(content, str):
+                raise HostWriteError(f"Pending plan has no recoverable preimage: {relative}")
+        elif raw.get("operation") == "append_text":
+            content = _load_recovery_blob(root, str(expected))
+        else:
+            raise HostWriteError("Host-write plan contains an unsupported recovery operation")
+        if hashlib.sha256(content.encode("utf-8")).hexdigest() != expected:
+            raise HostWriteError(f"Recovered preimage hash does not match signed plan: {relative}")
+        recovery.append({"path": relative, "expected_absent": False, "content": content, "sha256": expected})
+    if relative_path is not None and not recovery:
+        raise HostWriteError(f"Pending plan does not target requested recovery path: {relative_path}")
+    return {
+        "recoverable": True,
+        "plan_id": plan_id,
+        "project_root": str(root.resolve()),
+        "operations": recovery,
+        "next_action": "Restore these signed preimages only through the host file API, then rerun host-write check.",
     }
 
 

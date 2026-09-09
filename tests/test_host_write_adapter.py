@@ -32,16 +32,34 @@ def _apply_host_plan(root: Path, payload: dict[str, Any]) -> str:
     verify_record(plan)
     plan_id = str(plan["plan_id"])
     for operation in plan["operations"]:
-        assert operation["operation"] == "write_text"
         target = root / str(operation["path"])
-        expected = operation["expected_preimage"]
-        if expected is None:
-            assert not target.exists()
+        kind = operation["operation"]
+        if kind == "write_text":
+            expected = operation["expected_preimage"]
+            if expected is None:
+                assert not target.exists()
+            else:
+                assert target.read_text(encoding="utf-8") == expected
+                assert hashlib.sha256(target.read_bytes()).hexdigest() == operation["expected_preimage_sha256"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(str(operation["content"]).encode("utf-8"))
+        elif kind == "append_text":
+            expected_hash = operation["expected_preimage_sha256"]
+            if expected_hash is None:
+                assert not target.exists()
+                assert operation["expected_tail"] is None
+            else:
+                assert target.is_file()
+                assert hashlib.sha256(target.read_bytes()).hexdigest() == expected_hash
+                assert len(target.read_bytes()) == operation["expected_preimage_size"]
+                assert target.read_text(encoding="utf-8").endswith(operation["expected_tail"])
+            append_bytes = str(operation["append_content"]).encode("utf-8")
+            assert hashlib.sha256(append_bytes).hexdigest() == operation["append_sha256"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("ab") as handle:
+                handle.write(append_bytes)
         else:
-            assert target.read_text(encoding="utf-8") == expected
-            assert hashlib.sha256(target.read_bytes()).hexdigest() == operation["expected_preimage_sha256"]
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(str(operation["content"]).encode("utf-8"))
+            raise AssertionError(f"unsupported test host operation: {kind}")
         assert hashlib.sha256(target.read_bytes()).hexdigest() == operation["content_sha256"]
     return plan_id
 
@@ -206,6 +224,155 @@ def test_pending_plan_blocks_second_mutation_and_preimage_mismatch_fails(
         ],
     )
     assert code == 0 and aborted["aborted"] is True
+
+
+def test_applied_unacknowledged_plan_blocks_host_and_direct_mutations(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    _host_mutation(capsys, root, "init")
+    started = _host_mutation(
+        capsys,
+        root,
+        "start",
+        "--invocation",
+        "$stackmarshal build applied pending lock regression",
+    )
+    run_id = str(started["command_result"]["run_id"])
+    code, planned = _call(
+        capsys,
+        [
+            "--root",
+            str(root),
+            "--write-mode",
+            "host",
+            "state",
+            "transition",
+            Phase.INTENT_NORMALIZATION.value,
+            "--run-id",
+            run_id,
+        ],
+    )
+    assert code == 0
+    plan_id = _apply_host_plan(root, planned)
+    pending_before = pending_plan_path(root).read_bytes()
+
+    code, rejected = _call(
+        capsys,
+        [
+            "--root",
+            str(root),
+            "--write-mode",
+            "host",
+            "task",
+            "add",
+            "blocked",
+            "--run-id",
+            run_id,
+            "--summary",
+            "must not replace pending plan",
+        ],
+    )
+    assert code == EXIT_INVALID_INPUT
+    assert "still pending" in rejected["error"]
+    assert pending_plan_path(root).read_bytes() == pending_before
+
+    code, rejected = _call(
+        capsys,
+        [
+            "--root",
+            str(root),
+            "activity",
+            "record",
+            "tool-call",
+            "--run-id",
+            run_id,
+        ],
+    )
+    assert code == EXIT_INVALID_INPUT
+    assert "still pending" in rejected["error"]
+    assert pending_plan_path(root).read_bytes() == pending_before
+
+    code, ack = _call(capsys, ["--root", str(root), "host-write", "ack", "--plan-id", plan_id])
+    assert code == 0 and ack["acknowledged"] is True
+
+
+def test_event_append_plan_is_compact_and_recoverable(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    _host_mutation(capsys, root, "init")
+    started = _host_mutation(
+        capsys,
+        root,
+        "start",
+        "--invocation",
+        "$stackmarshal build compact append contract",
+    )
+    run_id = str(started["command_result"]["run_id"])
+    events = root / ".stackmarshal" / "runs" / run_id / "events.jsonl"
+    original = events.read_text(encoding="utf-8")
+
+    code, planned = _call(
+        capsys,
+        [
+            "--root",
+            str(root),
+            "--write-mode",
+            "host",
+            "state",
+            "transition",
+            Phase.INTENT_NORMALIZATION.value,
+            "--run-id",
+            run_id,
+        ],
+    )
+    assert code == 0
+    event_op = next(item for item in planned["plan"]["operations"] if item["path"].endswith("events.jsonl"))
+    assert event_op["operation"] == "append_text"
+    assert "expected_preimage" not in event_op
+    assert "content" not in event_op
+    assert event_op["expected_preimage_size"] == len(original.encode("utf-8"))
+    assert original.endswith(event_op["expected_tail"])
+    assert len(event_op["expected_tail"]) <= 512
+    assert len(event_op["append_content"]) < len(original) + len(event_op["append_content"])
+
+    events.write_bytes((original + "accidental duplicate\n").encode("utf-8"))
+    code, checked = _call(
+        capsys,
+        ["--root", str(root), "host-write", "check", "--plan-id", str(planned["plan_id"])],
+    )
+    assert code == EXIT_INVALID_STATE
+    assert any("preimage_hash_mismatch" in error for error in checked["errors"])
+
+    code, recovery = _call(
+        capsys,
+        [
+            "--root",
+            str(root),
+            "host-write",
+            "recover",
+            "--plan-id",
+            str(planned["plan_id"]),
+            "--path",
+            event_op["path"],
+        ],
+    )
+    assert code == 0
+    assert recovery["operations"][0]["content"] == original
+    assert recovery["operations"][0]["sha256"] == event_op["expected_preimage_sha256"]
+
+    events.write_bytes(original.encode("utf-8"))
+    code, checked = _call(
+        capsys,
+        ["--root", str(root), "host-write", "check", "--plan-id", str(planned["plan_id"])],
+    )
+    assert code == 0 and checked["ready_to_apply"] is True
+    plan_id = _apply_host_plan(root, planned)
+    code, ack = _call(capsys, ["--root", str(root), "host-write", "ack", "--plan-id", plan_id])
+    assert code == 0 and ack["acknowledged"] is True
 
 
 def test_host_plan_tamper_and_wrong_postimage_fail_closed(

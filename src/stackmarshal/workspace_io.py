@@ -34,6 +34,30 @@ class TextMutation:
         }
 
 
+@dataclass
+class AppendTextMutation:
+    path: str
+    expected_preimage_sha256: str | None
+    expected_preimage_size: int
+    expected_tail: str | None
+    append_sha256: str
+    append_content: str
+    content_sha256: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "operation": "append_text",
+            "path": self.path,
+            "expected_preimage_sha256": self.expected_preimage_sha256,
+            "expected_preimage_size": self.expected_preimage_size,
+            "expected_tail": self.expected_tail,
+            "append_sha256": self.append_sha256,
+            "append_content": self.append_content,
+            "content_sha256": self.content_sha256,
+            "preimage_blob_sha256": self.expected_preimage_sha256,
+        }
+
+
 class DirectWorkspaceWriter:
     mode = "direct"
 
@@ -93,8 +117,9 @@ class HostPlanWorkspaceWriter:
 
     def __init__(self, root: Path) -> None:
         self.root = root.resolve(strict=True)
-        self._mutations: OrderedDict[str, TextMutation] = OrderedDict()
+        self._mutations: OrderedDict[str, TextMutation | AppendTextMutation] = OrderedDict()
         self._overlay: dict[str, str] = {}
+        self._initial_preimages: dict[str, tuple[str | None, str | None]] = {}
         self._required_directories: OrderedDict[str, None] = OrderedDict()
 
     def _relative(self, path: Path) -> str:
@@ -117,11 +142,12 @@ class HostPlanWorkspaceWriter:
         return relative.as_posix()
 
     def _initial_text(self, path: Path, relative: str, encoding: str) -> tuple[str | None, str | None]:
-        if relative in self._mutations:
-            mutation = self._mutations[relative]
-            return mutation.expected_preimage, mutation.expected_preimage_sha256
+        if relative in self._initial_preimages:
+            return self._initial_preimages[relative]
         if not path.exists():
-            return None, None
+            result: tuple[str | None, str | None] = (None, None)
+            self._initial_preimages[relative] = result
+            return result
         if path.is_symlink() or not path.is_file():
             raise WorkspaceWriteError(f"Host write target is not a regular file: {relative}")
         payload = path.read_bytes()
@@ -129,7 +155,9 @@ class HostPlanWorkspaceWriter:
             text = payload.decode(encoding)
         except UnicodeDecodeError as exc:
             raise WorkspaceWriteError(f"Host write only supports UTF-8 text project files: {relative}") from exc
-        return text, hashlib.sha256(payload).hexdigest()
+        result = (text, hashlib.sha256(payload).hexdigest())
+        self._initial_preimages[relative] = result
+        return result
 
     def exists(self, path: Path) -> bool:
         relative = self._relative(path)
@@ -188,17 +216,54 @@ class HostPlanWorkspaceWriter:
             parent = parent.parent
 
     def append_text(self, path: Path, text: str, *, encoding: str = "utf-8") -> None:
+        if encoding.casefold().replace("-", "") != "utf8":
+            raise WorkspaceWriteError("Host write plans support UTF-8 text only")
         relative = self._relative(path)
+        existing = self._mutations.get(relative)
         current = self._overlay.get(relative)
         if current is None:
-            current = path.read_text(encoding=encoding) if path.exists() else ""
-        self.write_text(path, current + text, encoding=encoding)
+            preimage, preimage_hash = self._initial_text(path, relative, encoding)
+            current = preimage or ""
+        else:
+            preimage, preimage_hash = self._initial_text(path, relative, encoding)
+        next_content = current + text
+        self._overlay[relative] = next_content
+        if isinstance(existing, TextMutation):
+            self._mutations[relative] = TextMutation(
+                path=relative,
+                expected_preimage_sha256=preimage_hash,
+                expected_preimage=preimage,
+                content_sha256=hashlib.sha256(next_content.encode(encoding)).hexdigest(),
+                content=next_content,
+            )
+        else:
+            append_content = (existing.append_content if isinstance(existing, AppendTextMutation) else "") + text
+            self._mutations[relative] = AppendTextMutation(
+                path=relative,
+                expected_preimage_sha256=preimage_hash,
+                expected_preimage_size=len((preimage or "").encode(encoding)),
+                expected_tail=(preimage[-512:] if preimage else None),
+                append_sha256=hashlib.sha256(append_content.encode(encoding)).hexdigest(),
+                append_content=append_content,
+                content_sha256=hashlib.sha256(next_content.encode(encoding)).hexdigest(),
+            )
+        parent = Path(relative).parent
+        while parent.as_posix() not in {".", ""}:
+            self._required_directories.setdefault(parent.as_posix(), None)
+            parent = parent.parent
 
     def copy_text(self, source: Path, destination: Path, *, encoding: str = "utf-8") -> None:
         self.write_text(destination, source.read_text(encoding=encoding), encoding=encoding)
 
     def mutations(self) -> list[dict[str, Any]]:
         return [mutation.to_dict() for mutation in self._mutations.values()]
+
+    def recovery_preimages(self) -> dict[str, str]:
+        return {
+            relative: preimage
+            for relative, (preimage, _digest) in self._initial_preimages.items()
+            if preimage is not None
+        }
 
     def required_directories(self) -> list[str]:
         return list(self._required_directories)

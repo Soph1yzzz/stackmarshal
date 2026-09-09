@@ -258,6 +258,32 @@ def worktree_fingerprint(root: Path) -> str | None:
     return digest.hexdigest()
 
 
+def portable_project_identity(root: Path) -> str:
+    """Return repository identity that survives an intentional workspace relocation."""
+
+    resolved = root.resolve()
+    discovered_top_level = _run_git(resolved, "rev-parse", "--show-toplevel")
+    top_level = Path(discovered_top_level).resolve() if discovered_top_level else None
+    repository_owned = top_level == resolved
+    if repository_owned:
+        roots = _run_git(resolved, "rev-list", "--max-parents=0", "HEAD")
+        remote = _run_git(resolved, "config", "--get", "remote.origin.url")
+        lineage = sorted(roots.splitlines()) if roots else []
+    else:
+        remote = None
+        lineage = []
+    seed = json.dumps(
+        {
+            "repository_owned": repository_owned,
+            "root_commits": lineage,
+            "remote_origin": remote or None,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(seed.encode()).hexdigest()
+
+
 def project_info(root: Path) -> ProjectInfo:
     resolved = root.resolve()
     discovered_top_level = _run_git(resolved, "rev-parse", "--show-toplevel")

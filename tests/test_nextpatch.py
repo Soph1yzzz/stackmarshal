@@ -441,6 +441,53 @@ def _isolate_doctor_install_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     return root
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows managed shell alias contract")
+def test_windows_managed_cmd_and_git_bash_shim_count_as_one_launcher_family(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_home = tmp_path / "codex"
+    skill = codex_home / "skills" / "stackmarshal" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(f'---\nmetadata:\n  version: "{__version__}"\n---\n', encoding="utf-8")
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    install_root = _isolate_doctor_install_root(tmp_path, monkeypatch)
+    bin_dir = install_root / "bin"
+    bin_dir.mkdir(parents=True)
+    cmd = bin_dir / "stackmarshal.cmd"
+    shim = bin_dir / "stackmarshal"
+    cmd.write_text(
+        f'"%~dp0..\\versions\\v{__version__}\\venv\\Scripts\\python.exe" -I -m stackmarshal.cli %*\r\n',
+        encoding="utf-8",
+    )
+    shim.write_text(
+        f'#!/bin/sh\nexec "$SCRIPT_DIR/../versions/v{__version__}/venv/Scripts/python.exe" -I -m stackmarshal.cli "$@"\n',
+        encoding="utf-8",
+    )
+    (install_root / "install-state.json").write_text(
+        json.dumps(
+            {
+                "version": __version__,
+                "cli": {
+                    "version": __version__,
+                    "launcher": str(cmd),
+                    "shell_launcher": str(shim),
+                },
+                "skill": {"version": __version__},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PATH", str(bin_dir))
+
+    code, payload = _call(capsys, ["doctor", "--host-skill-version", __version__])
+
+    assert code == 0
+    assert payload["ready"] is True
+    assert len(payload["path_resolution"]["candidates"]) == 2
+    assert "multiple_stackmarshal_launchers_on_path" not in payload["warnings"]
+    assert payload["shadowed_versions"] == []
+
+
 def test_doctor_detects_stale_host_skill(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

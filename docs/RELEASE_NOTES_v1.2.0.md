@@ -79,4 +79,4 @@ Before publication the release must pass:
 
 ## Roadmap
 
-The previously planned operator UX / fully non-invasive state-placement work moves to v1.2.1. Claude Code adapter work moves to v1.2.2, Gemini CLI to v1.2.3, and adapter-conformance polish to v1.2.4. v1.2.0 is intentionally limited to the host-write transport foundation plus the directly observed Windows repair-cleanup follow-up.
+At v1.2.0 release time, the previously planned operator UX / fully non-invasive state-placement work moved to v1.2.1, with Claude Code, Gemini CLI, and adapter-conformance work behind it. ChromeBridge HostWrite dogfood later exposed higher-priority transaction/transport issues, so v1.2.1 became the HostWrite ergonomics/correctness release and the deferred operator-UX scope moved unchanged to v1.2.2. v1.2.0 itself remains intentionally limited to the host-write transport foundation plus the directly observed Windows repair-cleanup follow-up.

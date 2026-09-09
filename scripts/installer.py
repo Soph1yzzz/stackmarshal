@@ -560,6 +560,15 @@ def launcher_text(version: str) -> tuple[str, str]:
     )
 
 
+def windows_shell_launcher_text(version: str) -> tuple[str, str]:
+    return (
+        "stackmarshal",
+        "#!/bin/sh\n"
+        'SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\n'
+        f'exec "$SCRIPT_DIR/../versions/v{version}/venv/Scripts/python.exe" -I -m stackmarshal.cli "$@"\n',
+    )
+
+
 def _broadcast_windows_environment_change() -> None:
     try:
         import ctypes
@@ -1012,6 +1021,8 @@ def main(argv: list[str] | None = None) -> int:
         skill_swap: DirectorySwap | None = None
         launcher_path: Path | None = None
         launcher_snapshot: FileSnapshot | None = None
+        shell_launcher_path: Path | None = None
+        shell_launcher_snapshot: FileSnapshot | None = None
         state_snapshot = snapshot_file(state_path)
         restart_marker = restart_marker_path(codex_home) if not args.cli_only else None
         restart_marker_snapshot = (
@@ -1049,9 +1060,15 @@ def main(argv: list[str] | None = None) -> int:
                 launcher_path = bin_dir / launcher_name
                 launcher_snapshot = snapshot_file(launcher_path)
                 atomic_write_text(launcher_path, launcher, executable=os.name != "nt")
+                if os.name == "nt":
+                    shell_launcher_name, shell_launcher = windows_shell_launcher_text(version)
+                    shell_launcher_path = bin_dir / shell_launcher_name
+                    shell_launcher_snapshot = snapshot_file(shell_launcher_path)
+                    atomic_write_text(shell_launcher_path, shell_launcher, executable=True)
                 new_state["cli"] = {
                     "version": version,
                     "launcher": str(launcher_path),
+                    "shell_launcher": str(shell_launcher_path) if shell_launcher_path is not None else None,
                     "version_dir": str(version_dir),
                     "wheel_sha256": asset_hashes[wheel_name],
                     "python": {
@@ -1115,6 +1132,8 @@ def main(argv: list[str] | None = None) -> int:
                     restore_file(restart_marker, restart_marker_snapshot, codex_home)
                 if launcher_path is not None and launcher_snapshot is not None:
                     restore_file(launcher_path, launcher_snapshot, bin_dir)
+                if shell_launcher_path is not None and shell_launcher_snapshot is not None:
+                    restore_file(shell_launcher_path, shell_launcher_snapshot, bin_dir)
                 if skill_swap is not None:
                     skill_swap.rollback()
                 if cli_swap is not None:
