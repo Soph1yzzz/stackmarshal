@@ -48,6 +48,7 @@ from .state import (
     append_event,
     create_run,
     infer_mode,
+    legal_transitions,
     load_state,
     now_iso,
     refresh_project_info,
@@ -88,6 +89,15 @@ EXIT_UNSAFE = 6
 EXIT_EXTERNAL = 7
 EXIT_CHECKPOINT = 8
 EXIT_COMPLETE = 9
+
+RESUMABLE_STATUSES = frozenset(
+    {
+        Status.CHECKPOINT_READY,
+        Status.BLOCKED_EXTERNAL,
+        Status.VERIFICATION_EXTERNAL_BLOCKED,
+        Status.APPROVAL_REQUIRED,
+    }
+)
 
 
 def _configure_stdio_utf8() -> None:
@@ -473,6 +483,56 @@ def cmd_state_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_next(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    _, state = _find_state(root, args.run_id)
+    blockers: list[dict[str, Any]] = []
+    try:
+        pending = pending_status(root)
+    except (ValueError, HostWriteError) as exc:
+        pending = {"pending": True, "valid": False}
+        blockers.append({"kind": "host_write_diagnostic", "reason": str(exc)})
+    try:
+        graph = load_task_graph(root)
+        tasks = graph.get("tasks", [])
+        incomplete = [
+            str(task.get("id"))
+            for task in tasks
+            if isinstance(task, dict) and task.get("mandatory", True) and task.get("status") != "done"
+        ]
+    except ValueError as exc:
+        incomplete = []
+        blockers.append({"kind": "task_graph_diagnostic", "reason": str(exc)})
+    if pending.get("pending") and pending.get("valid", True):
+        blockers.append({"kind": "host_write_pending", "plan_id": pending.get("plan_id")})
+    if state.status is not Status.RUNNING:
+        blocker: dict[str, Any] = {"kind": "terminal_status", "status": state.status.value}
+        if isinstance(state.stop_reason, dict):
+            blocker["code"] = state.stop_reason.get("code")
+            blocker["reason"] = state.stop_reason.get("reason")
+        blockers.append(blocker)
+    try:
+        completion_prerequisites = _completion_gate_errors(root, state, require_finalization=True)
+    except ValueError as exc:
+        completion_prerequisites = ["completion_diagnostic_blocked"]
+        blockers.append({"kind": "completion_diagnostic", "reason": str(exc)})
+    _json(
+        {
+            "policy": "introspection_only",
+            "run_id": state.run_id,
+            "status": state.status.value,
+            "phase": state.phase.value,
+            "resumable": state.status in RESUMABLE_STATUSES,
+            "legal_transitions": [item.value for item in legal_transitions(state)],
+            "blockers": blockers,
+            "mandatory_tasks_incomplete": incomplete,
+            "completion_prerequisites": completion_prerequisites,
+            "host_write": pending,
+        }
+    )
+    return 0
+
+
 def cmd_state_transition(args: argparse.Namespace) -> int:
     root = _root(args.root)
     path, state = _find_state(root, args.run_id)
@@ -581,11 +641,82 @@ def cmd_activity_record(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_activity_sync_host(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    path, state = _find_state(root, args.run_id)
+    if state.status is not Status.RUNNING:
+        raise ValueError(f"Cannot sync host telemetry for terminal run: {state.status.value}")
+    source = str(args.source).strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", source):
+        raise ValueError("Host telemetry source must use 1-64 letters, digits, dot, underscore, or hyphen")
+    observed = int(args.tool_calls_total)
+    if observed < 0:
+        raise ValueError("Observed tool-call total must be non-negative")
+    telemetry = state.progress.setdefault("host_telemetry", {})
+    if not isinstance(telemetry, dict):
+        raise ValueError("Invalid host_telemetry progress state")
+    previous_record = telemetry.get(source, {})
+    if not isinstance(previous_record, dict):
+        raise ValueError(f"Invalid host telemetry record for {source}")
+    previous = int(previous_record.get("tool_calls_total", 0))
+    if observed < previous:
+        raise ValueError(
+            f"Host telemetry total moved backwards for {source}: observed={observed}, previous={previous}; use a new source id for a new counter epoch"
+        )
+    delta = observed - previous
+    if delta == 0:
+        _json({"synced": True, "source": source, "observed_tool_calls": observed, "delta": 0, "changed": False})
+        return 0
+    try:
+        record = record_activity(
+            state,
+            "tool-call",
+            amount=delta,
+            detail=f"host-observed:{source}",
+        )
+    except ActivityBudgetExhausted as exc:
+        return _formal_budget_stop(root, path, state, exc)
+    telemetry[source] = {
+        "tool_calls_total": observed,
+        "updated_at": now_iso(),
+        "phase": state.phase.value,
+    }
+    save_state(state, path)
+    append_event(
+        path.with_name("events.jsonl"),
+        "host_telemetry_synced",
+        state.phase,
+        {"source": source, "observed_tool_calls": observed, "delta": delta, "activity": record},
+    )
+    _json(
+        {
+            "synced": True,
+            "source": source,
+            "observed_tool_calls": observed,
+            "delta": delta,
+            "changed": True,
+            "budget": state.budget.used,
+        }
+    )
+    return 0
+
+
 def cmd_task_add(args: argparse.Namespace) -> int:
     root = _root(args.root)
-    _, state = _find_state(root, args.run_id)
-    if state.status is not Status.RUNNING or state.phase is not Phase.TASK_GRAPH:
-        raise ValueError("Tasks may be added only during TASK_GRAPH")
+    path, state = _find_state(root, args.run_id)
+    if state.status is not Status.RUNNING:
+        raise ValueError(f"Cannot add task for terminal run: {state.status.value}")
+    replan_records: list[dict[str, Any]] = []
+    if args.replan:
+        if state.phase is not Phase.REPLAN:
+            raise ValueError("Late task additions require REPLAN phase")
+        try:
+            replan_records.append(record_activity(state, "architecture-replan", detail="late task graph amendment"))
+            replan_records.append(record_activity(state, "scope-addition", detail=f"late task:{args.task_id}"))
+        except ActivityBudgetExhausted as exc:
+            return _formal_budget_stop(root, path, state, exc)
+    elif state.phase is not Phase.TASK_GRAPH:
+        raise ValueError("Tasks may be added only during TASK_GRAPH unless explicitly admitted from REPLAN")
     task = add_task(
         root,
         args.task_id,
@@ -593,7 +724,15 @@ def cmd_task_add(args: argparse.Namespace) -> int:
         mandatory=not args.optional,
         acceptance=args.acceptance,
     )
-    _json({"added": True, "task": task})
+    if replan_records:
+        save_state(state, path)
+        append_event(
+            path.with_name("events.jsonl"),
+            "late_task_admitted",
+            state.phase,
+            {"task_id": args.task_id, "budget_records": replan_records},
+        )
+    _json({"added": True, "task": task, "replan": bool(replan_records)})
     return 0
 
 
@@ -834,10 +973,14 @@ def _doctor_payload(host: str | None) -> dict[str, Any]:
             resolved_launcher_version = managed_version
 
     authoritative_versions = {__version__}
-    for value in (installed, managed_version, resolved_launcher_version):
+    for value in (managed_version, resolved_launcher_version):
         if value:
             authoritative_versions.add(value)
     known_versions = set(authoritative_versions)
+    if installed:
+        known_versions.add(installed)
+    if host:
+        known_versions.add(host)
     shadowed_versions: set[str] = set()
     for candidate in path_candidates:
         candidate_key = _normalized_path(Path(str(candidate["path"])))
@@ -855,11 +998,14 @@ def _doctor_payload(host: str | None) -> dict[str, Any]:
         managed_launcher_mismatch = _normalized_path(Path(managed_launcher)) != _normalized_path(Path(resolved_launcher))
     version_skew = len(authoritative_versions) > 1 or managed_launcher_mismatch
     repair_required = (
-        installed != __version__
-        or (managed_version is not None and managed_version != __version__)
+        (managed_version is not None and managed_version != __version__)
         or version_skew
         or managed_state_error is not None
     )
+    codex_installed_matches = installed == __version__
+    codex_host_matches = host is None or host == __version__
+    codex_skill_ready = codex_installed_matches and codex_host_matches and not restart_pending
+    core_ready = not repair_required
 
     warnings: list[str] = []
     if version_skew:
@@ -878,10 +1024,14 @@ def _doctor_payload(host: str | None) -> dict[str, Any]:
         warnings.append("managed_launcher_not_resolved_first")
     if managed_state_error is not None:
         warnings.append(managed_state_error)
+    if installed is not None and not codex_installed_matches:
+        warnings.append("codex_skill_version_skew")
 
-    ready = not restart_required and not repair_required and not restart_pending
+    ready = core_ready and (codex_skill_ready if host is not None else True)
     return {
         "ready": ready,
+        "core_ready": core_ready,
+        "integration_ready": {"codex": codex_skill_ready},
         "cli_version": __version__,
         "installed_skill_version": installed,
         "host_skill_version": host,
@@ -889,6 +1039,7 @@ def _doctor_payload(host: str | None) -> dict[str, Any]:
         "restart_pending": restart_pending,
         "restart_marker_version": marker_version,
         "repair_required": repair_required,
+        "codex_skill_ready": codex_skill_ready,
         "version_skew": version_skew,
         "authoritative_versions": sorted(authoritative_versions),
         "known_versions": sorted(known_versions),
@@ -1173,13 +1324,7 @@ def cmd_resume(args: argparse.Namespace) -> int:
     path, state = _find_state(root, run_id)
     if state.status is Status.RUNNING:
         raise ValueError(f"Run is already active: {run_id}")
-    resumable = {
-        Status.CHECKPOINT_READY,
-        Status.BLOCKED_EXTERNAL,
-        Status.VERIFICATION_EXTERNAL_BLOCKED,
-        Status.APPROVAL_REQUIRED,
-    }
-    if state.status not in resumable:
+    if state.status not in RESUMABLE_STATUSES:
         raise ValueError(f"Run status is not resumable: {state.status.value}")
     active = [(candidate, live) for candidate, live in _active_runs(root) if live.run_id != run_id]
     if active:
@@ -1530,6 +1675,10 @@ def build_parser() -> argparse.ArgumentParser:
     move.add_argument("--run-id")
     move.set_defaults(func=cmd_state_transition)
 
+    next_parser = sub.add_parser("next")
+    next_parser.add_argument("--run-id")
+    next_parser.set_defaults(func=cmd_next)
+
     budget = sub.add_parser("budget")
     budget_sub = budget.add_subparsers(dest="budget_command", required=True)
     budget_check = budget_sub.add_parser("check")
@@ -1558,6 +1707,11 @@ def build_parser() -> argparse.ArgumentParser:
     activity_record.add_argument("--task-id")
     activity_record.add_argument("--detail")
     activity_record.set_defaults(func=cmd_activity_record)
+    activity_sync = activity_sub.add_parser("sync-host")
+    activity_sync.add_argument("--run-id")
+    activity_sync.add_argument("--source", required=True)
+    activity_sync.add_argument("--tool-calls-total", type=int, required=True)
+    activity_sync.set_defaults(func=cmd_activity_sync_host)
 
     task = sub.add_parser("task")
     task_sub = task.add_subparsers(dest="task_command", required=True)
@@ -1567,6 +1721,7 @@ def build_parser() -> argparse.ArgumentParser:
     task_add.add_argument("--summary", required=True)
     task_add.add_argument("--acceptance", action="append", default=[])
     task_add.add_argument("--optional", action="store_true")
+    task_add.add_argument("--replan", action="store_true", help="admit a late task only from REPLAN and consume bounded replan/scope budget")
     task_add.set_defaults(func=cmd_task_add)
     task_start = task_sub.add_parser("start")
     task_start.add_argument("task_id")

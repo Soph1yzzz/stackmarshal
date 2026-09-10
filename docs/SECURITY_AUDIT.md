@@ -217,6 +217,14 @@ tests, the full automated quality gate, public multi-OS CI, and CodeQL. A separa
 repository scan is **not claimed** for v1.2.1; if later review finds a material unresolved boundary
 issue, release remains blocked until it is resolved or explicitly scoped with equivalent evidence.
 
+## v1.2.2 focused adaptive-harness review
+
+The changed boundaries are narrow: read-only introspection, late-task admission, host telemetry accounting, readiness reporting, and invocation parity.
+
+`next` does not mutate state and exposes diagnostic failures as blockers without generating recovery commands. Late tasks remain impossible outside `TASK_GRAPH` unless the run is explicitly in `REPLAN`; admission consumes both replan and scope-addition budget. Host telemetry accepts only a bounded source identifier and a non-negative monotonic total, charges only the delta, rejects rollback, and keeps the existing budget-exhaustion stop path. The doctor readiness split does not relax an explicit Codex host-version check.
+
+Security evidence: focused source review, adversarial regression, full automated quality gates, CI, and CodeQL.
+
 ## Scope limitation
 
 The application threat model excludes kernel compromise and malware already executing as the

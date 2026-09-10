@@ -384,6 +384,12 @@ def create_run(root: Path, invocation: str, mode: Mode, config: Config) -> RunSt
     )
 
 
+def legal_transitions(state: RunState) -> list[Phase]:
+    if state.status is not Status.RUNNING:
+        return []
+    return sorted(_ALLOWED_TRANSITIONS[state.phase], key=lambda item: item.value)
+
+
 def transition(state: RunState, target: Phase) -> RunState:
     if state.status is not Status.RUNNING:
         raise ValueError(f"Cannot transition terminal run: {state.status}")
@@ -475,7 +481,10 @@ def validate_invocation(text: str) -> bool:
         "with stackmarshal", "使用 stackmarshal", "用 stackmarshal", "stackmarshal로",
         "utilise stackmarshal", "utilize stackmarshal",
     )
-    return any(marker in normalized for marker in use_markers)
+    japanese_method_request = re.search(
+        r"stackmarshalで.{0,24}(実装|作|開発|調べ|準備|続|修正|直)", normalized
+    )
+    return any(marker in normalized for marker in use_markers) or japanese_method_request is not None
 
 
 def infer_mode(text: str) -> Mode:

@@ -1,6 +1,6 @@
 # Future Work
 
-Items intentionally outside the v1.2.1 HostWrite ergonomics/correctness scope:
+Items intentionally outside the v1.2.2 introspection/adaptive-harness scope:
 
 - Claude Code, Gemini CLI, Cline, GitHub Copilot, and OpenHands adapters.
 - Multi-agent research/build/review orchestration.
@@ -45,14 +45,19 @@ The next intended sequencing is:
   - add `host-write recover` and a signed-tail DevSpace edit path without pretending per-file host APIs are multi-file atomic,
   - add signed fingerprint-preserving workspace relocation as a distinct identity migration from repository bootstrap,
   - add a managed extensionless Windows shell shim so bare `stackmarshal` works from Git Bash without creating doctor alias noise.
-- **v1.2.2 — Operator UX / fully non-invasive operation**
+- **v1.2.2 — Introspection / adaptive harness**
+  - add read-only `stackmarshal next` state introspection without prescribing recovery commands,
+  - admit mandatory work discovered after the frozen task graph only through bounded `REPLAN`,
+  - accept monotonic host-observed tool-call totals without double-counting replayed telemetry,
+  - separate Core readiness from Codex Skill/session readiness while keeping explicit integration checks strict.
+- **v1.2.3 — Operator UX / fully non-invasive operation**
   - repository-external/local initialization mode beyond the v1.1.5 existing-ignore optimization,
   - separate environment inventory from delivery-quality audit,
   - compact human CLI output with explicit full JSON mode,
   - make actionable shadowed-launcher cleanup guidance visible directly in doctor output.
-- **v1.2.3 — Claude Code adapter**
-- **v1.2.4 — Gemini CLI adapter**
-- **v1.2.5 — Adapter conformance polish**
+- **v1.2.4 — Claude Code adapter**
+- **v1.2.5 — Gemini CLI adapter**
+- **v1.2.6 — Adapter conformance polish**
 - **v1.3.0 — Multi-agent orchestration**
 - **v1.4.0 — Signed provenance**
 - **v2.0.0 — schema/migrations-class changes**

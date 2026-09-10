@@ -115,7 +115,7 @@ installerは専用のvirtual environmentへCLIを入れ、同じversionのCodex 
 
 初回導入後の更新は`stackmarshal pin latest`で行えます。versionを固定したい場合はexact versionを指定できます。
 
-v1.1.5では同一runのresume、legacy stateの安全なarchive、verification後の小さな修正を扱う`CORRECTION` laneを追加しました。v1.2.0でHostWriteAdapterを導入し、v1.2.1ではその実運用で見つかったpending transaction、payload量、workspace移動、Git Bashからの起動をまとめて詰めています。
+v1.1.5では同一runのresume、legacy stateの安全なarchive、verification後の小さな修正を扱う`CORRECTION` laneを追加しました。v1.2.0でHostWriteAdapterを導入し、v1.2.1ではpending transaction、payload量、workspace移動、Git Bashからの起動を詰めました。v1.2.2では`next`によるread-only introspection、late taskのbounded replan、host telemetry同期、Core/Codex readiness分離を追加しています。
 
 ## StackMarshalが管理するもの
 
@@ -129,9 +129,10 @@ StackMarshalは、Codex向けのResearch First型orchestration Skillと、その
 - **調査は必要なときだけ行う**：小さな局所修正に大掛かりなResearchを挟みません。
 - **使えるものを種類ごとに分ける**：Skill、MCP、plugin、library、CLI、参考OSSを同じものとして扱いません。
 - **導入前にSupply Chainを確認する**：pin、hash、provenance、install hook、権限、license、rollback方法を確認します。
-- **実装前にArchitectureを固める**：後から前提が崩れた場合だけ、上限つきで再調査します。
+- **実装前にArchitectureを固める**：後から前提が崩れた場合だけ、上限つきで再調査します。Task Graph後に必須作業が増えた場合も`REPLAN`を通します。
 - **live stateをrepositoryだけに任せない**：`run.json`とcanonical task graphはユーザー領域HMACで認証します。repository内のファイルを書き換えただけではphaseや`COMPLETE`を偽装できません。
-- **実際の作業量をbudgetへ記録する**：CodexがToolを使ったのに帳簿上は`used=0`という状態を避けます。
+- **実際の作業量をbudgetへ記録する**：CodexがToolを使ったのに帳簿上は`used=0`という状態を避けます。Hostが単調増加する実測値を持つ場合は差分だけ同期できます。
+- **次に何が可能かを状態として返す**：`stackmarshal next`はblocker、legal transition、未完了task、completion条件を返しますが、復旧方法そのものは決めません。
 - **taskの正本はmachine-readableに保つ**：task statusとevidenceをJSONで管理し、Markdownは人間向けviewとして生成します。
 - **止まり方を正式なstateにする**：budget exhaustion、同一failureの反復、stagnation、scope driftなどを検出してrunを有限に保ちます。
 - **checkpointから同じrunへ戻れる**：`stackmarshal resume <run-id>`は、checkpointのHMAC、project identity、Git state、worktree fingerprint、resume phaseを照合してから再開します。
@@ -188,7 +189,7 @@ stackmarshal version
 exact releaseへ固定する場合：
 
 ```bash
-stackmarshal pin 1.2.1
+stackmarshal pin 1.2.2
 ```
 
 `stackmarshal version`では、現在動いているCLI、managed pin、installed Skill、PATHで解決されたlauncherをまとめて確認できます。すべて揃っていれば`OK`、ずれがあれば`DRIFTED`です。scriptからversion文字列だけ欲しい場合は`stackmarshal --version`を使います。
@@ -204,7 +205,7 @@ CLIの必須runtime dependencyは0です。Skillを導入・更新した後はCo
 Skillだけを手動で入れる場合も、`main`ではなく対応するRelease tagへ固定してください。
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.1/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.2/skills/stackmarshal
 ```
 
 ## CLI例
@@ -219,12 +220,15 @@ stackmarshal migrate --dry-run
 stackmarshal invocation "StackMarshalを使って実装して"
 stackmarshal start --mode build --budget standard \
   --invocation "StackMarshalを使って実装して"
-stackmarshal doctor --host-skill-version 1.2.1
+stackmarshal doctor --host-skill-version 1.2.2
 stackmarshal state show
+stackmarshal next
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
 stackmarshal activity record tool-call --amount 2 --detail "bounded host-tool batch"
+stackmarshal activity sync-host --source host-session --tool-calls-total 12
 stackmarshal task add implement --summary "機能を実装" --acceptance "tests pass"
+stackmarshal task add late-fix --summary "追加で必要になった作業" --acceptance "covered" --replan
 stackmarshal task start implement
 stackmarshal task complete implement --evidence "tests/test_feature.py passed"
 stackmarshal state transition CORRECTION

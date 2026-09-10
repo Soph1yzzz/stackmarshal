@@ -26,6 +26,7 @@ def test_invocation_gate_and_mode_inference() -> None:
     positives = [
         "StackMarshalを使って実装して",
         "StackMarshalで調べて",
+        "StackMarshalで次のvを作ろう",
         "Use StackMarshal to build it",
         "使用 StackMarshal 实现",
         "$stackmarshal prepare",
@@ -40,8 +41,8 @@ def test_invocation_gate_and_mode_inference() -> None:
     assert all(validate_invocation(item) for item in positives)
     assert not any(validate_invocation(item) for item in negatives)
     assert infer_mode(positives[1]) is Mode.RESEARCH
-    assert infer_mode(positives[4]) is Mode.PREPARE
-    assert infer_mode(positives[5]) is Mode.RESUME
+    assert infer_mode(positives[5]) is Mode.PREPARE
+    assert infer_mode(positives[6]) is Mode.RESUME
 
 
 def test_state_transitions_are_bounded(tmp_path: Path) -> None:

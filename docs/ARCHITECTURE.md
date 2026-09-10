@@ -37,9 +37,15 @@ Project decisions live in `.stackmarshal/project/`; ephemeral runs live in
 content-addressed HostWrite recovery blobs, and workspace-relocation permits live in the user's
 external StackMarshal state directory, never in the repository. Canonical `run.json` and `task-graph.json`
 are authenticated before they are accepted as execution/completion authority. Events are
-append-only JSONL. Architecture is frozen before task execution, and a post-freeze architecture or
-task-plan change requires a decision record. Verification-only fixes use a separate bounded
+append-only JSONL. Architecture is frozen before task execution. Mandatory work discovered after the
+task graph is admitted only from `REPLAN`, consuming both architecture-replan and scope-addition
+budget; normal task addition remains phase-bound. Verification-only fixes use a separate bounded
 `VERIFICATION -> CORRECTION -> VERIFICATION` lane so they do not consume architecture replan budget.
+
+`stackmarshal next` is a read-only view over this authority. It exposes the current state, blockers,
+legal transitions, incomplete mandatory tasks, and completion prerequisites without creating a
+recovery plan. Host-observed tool telemetry is similarly narrow: a named source may submit a
+monotonic absolute counter, and Core charges only the positive delta.
 
 A formal checkpoint records a signed resume phase. Explicitly resumable terminal states can return
 the same run id to `RUNNING` only after checkpoint HMAC, project identity, Git/dirty state, and exact

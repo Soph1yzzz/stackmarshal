@@ -25,6 +25,7 @@ Use [REQUIREMENTS_TRACEABILITY.md](REQUIREMENTS_TRACEABILITY.md) to map requirem
 ## Release
 
 - [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) — current release process and required gates.
+- [RELEASE_NOTES_v1.2.2.md](RELEASE_NOTES_v1.2.2.md) — v1.2.2 introspection, bounded late-task admission, host telemetry sync, and readiness separation.
 - [RELEASE_NOTES_v1.2.1.md](RELEASE_NOTES_v1.2.1.md) — v1.2.1 HostWrite transaction hardening, compact append/CAS, recovery, relocation, and Git Bash launcher support.
 - [RELEASE_NOTES_v1.2.0.md](RELEASE_NOTES_v1.2.0.md) — v1.2.0 host-write transport foundation for shell-write-restricted hosts, with signed plan/check/ack semantics.
 - [RELEASE_NOTES_v1.1.6.md](RELEASE_NOTES_v1.1.6.md) — v1.1.6 Windows self-update cleanup hotfix for locked old managed venvs.

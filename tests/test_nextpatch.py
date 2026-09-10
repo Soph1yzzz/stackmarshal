@@ -488,6 +488,34 @@ def test_windows_managed_cmd_and_git_bash_shim_count_as_one_launcher_family(
     assert payload["shadowed_versions"] == []
 
 
+def test_doctor_separates_core_readiness_from_codex_restart_readiness(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_home = tmp_path / "codex"
+    skill = codex_home / "skills" / "stackmarshal" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(f'---\nmetadata:\n  version: "{__version__}"\n---\n', encoding="utf-8")
+    (codex_home / ".stackmarshal-restart-required.json").write_text(
+        json.dumps({"version": __version__}), encoding="utf-8"
+    )
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    _isolate_doctor_install_root(tmp_path, monkeypatch)
+
+    code, core = _call(capsys, ["doctor"])
+    assert code == 0
+    assert core["ready"] is True
+    assert core["core_ready"] is True
+    assert core["codex_skill_ready"] is False
+    assert core["integration_ready"]["codex"] is False
+    assert core["restart_pending"] is True
+
+    code, codex = _call(capsys, ["doctor", "--host-skill-version", __version__])
+    assert code == EXIT_INVALID_STATE
+    assert codex["ready"] is False
+    assert codex["core_ready"] is True
+    assert codex["codex_skill_ready"] is False
+
+
 def test_doctor_detects_stale_host_skill(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

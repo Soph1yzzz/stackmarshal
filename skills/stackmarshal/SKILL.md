@@ -8,7 +8,7 @@ description: >
   "使用 StackMarshal 实现", or "$stackmarshal". Do not use for ordinary coding
   requests, explanations, comparisons, or text edits that merely mention the name.
 metadata:
-  version: "1.2.1"
+  version: "1.2.2"
 ---
 
 # StackMarshal
@@ -20,7 +20,7 @@ convergence: either `COMPLETE` with evidence or a formal, resumable stop.
 
 Before any work, verify host readiness and invocation in this order:
 
-1. Run `python scripts/stackmarshal_core.py host-ready --version "1.2.1"`.
+1. Run `python scripts/stackmarshal_core.py host-ready --version "1.2.2"`.
    The installer leaves a restart-pending marker outside the Skill directory. Only a
    matching newly loaded Skill may acknowledge and clear it. If this command reports
    `ready: false`, stop with `INVALID_STATE` and require a Codex restart.
@@ -31,7 +31,7 @@ Before any work, verify host readiness and invocation in this order:
    is not triggered, stop this skill and answer normally. A stale pre-restart Skill
    still invokes the replaced on-disk fallback; while the marker exists, that fallback
    refuses invocation with `restart_required` instead of silently emulating the new Skill.
-4. Run `stackmarshal doctor --host-skill-version "1.2.1"` before project work. A Skill,
+4. Run `stackmarshal doctor --host-skill-version "1.2.2"` before project work. A Skill,
    CLI, or host-version mismatch is `INVALID_STATE`.
 
 Never infer invocation from an ordinary coding request. Never invoke StackMarshal recursively.
@@ -86,7 +86,7 @@ that those writes form an atomic filesystem transaction.
 
 The direct and host paths share the same Core state machine, HMAC authority, budgets,
 acceptance gates, checkpoint rules, and finalization semantics; only the write transport
-differs. `migrate` is not host-write plannable in v1.2.1, and managed-install `pin` / `repair`
+differs. `migrate` is not host-write plannable in v1.2.2, and managed-install `pin` / `repair`
 remain outside the project HostWriteAdapter. For an intentional workspace move, create a
 signed permit with `stackmarshal relocate prepare --to <new-root>` before moving, then use
 `relocate accept` at the destination (with `--write-mode host` on shell-write-restricted hosts).
@@ -156,18 +156,22 @@ Record every post-freeze change as a decision.
 Create dependency-aware tasks with acceptance links, scope, attempts, status, and
 verification command using `stackmarshal task add`. The canonical task state is
 `.stackmarshal/project/task-graph.json`; the Markdown task graph is a generated human
-view. Research mode ends after the architecture report. Prepare mode ends after the
-task graph.
+view. If mandatory work is discovered after `TASK_GRAPH`, enter `REPLAN` and admit it
+with `stackmarshal task add --replan`; this consumes the bounded replan and scope-addition
+budgets instead of weakening the normal task-add phase rule. Research mode ends after
+the architecture report. Prepare mode ends after the task graph.
 
 ## 8. Build and verify
 
 In build mode, transition to `IMPLEMENTATION` before modifying the deliverable.
 Use `stackmarshal task start` before each task attempt and `stackmarshal task complete`
-with concrete evidence when it passes. Before a bounded host-tool batch, reserve the
-observable activity with `stackmarshal activity record tool-call --amount <N>`; record
-research rounds, replans, repeated failures, and stagnation cycles through the same
-activity ledger. Record at least one live `implementation` activity while still in
-`IMPLEMENTATION`.
+with concrete evidence when it passes. `stackmarshal next` is read-only state introspection:
+it reports blockers, legal transitions, incomplete mandatory tasks, and completion prerequisites
+without choosing a recovery command for the agent. When a host exposes a measured monotonic tool-call
+total, synchronize it with `stackmarshal activity sync-host --source <id> --tool-calls-total <N>`;
+otherwise reserve bounded host work explicitly with `stackmarshal activity record tool-call --amount <N>`.
+Record research rounds, replans, repeated failures, and stagnation cycles through the same activity
+ledger. Record at least one live `implementation` activity while still in `IMPLEMENTATION`.
 
 Each cycle must improve at least one observable measure: accepted criteria, passing
 tests, fewer unfinished tasks/blockers, lower uncertainty, a concrete root cause, or

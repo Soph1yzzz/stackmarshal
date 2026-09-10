@@ -127,8 +127,9 @@ made `stackmarshal pin latest` the normal update command; v1.1.5 adds real same-
 legacy-state archival, and bounded verification correction. v1.2.0 added the signed HostWriteAdapter
 path for MCP/agent hosts that forbid shell-based project mutation while preserving direct writes as
 the default. v1.2.1 hardens the pending transaction invariant, adds compact append/CAS plans and
-recovery, signed workspace relocation, and a Git Bash launcher shim on Windows. `stackmarshal version`
-remains the quick runtime/pin/Skill/launcher drift check. The detailed installation, security, CLI, state, release,
+recovery, signed workspace relocation, and a Git Bash launcher shim on Windows. v1.2.2 adds
+read-only `next` introspection, bounded late-task admission, host-observed telemetry sync, and
+separate Core/Codex readiness. `stackmarshal version` remains the quick runtime/pin/Skill/launcher drift check. The detailed installation, security, CLI, state, release,
 and development contracts remain below.
 
 ## Detailed overview
@@ -156,9 +157,10 @@ StackMarshal makes those failure modes explicit and bounded.
 - **Research first when warranted.** Small local edits can skip research.
 - **Cross-ecosystem capability mapping.** Skills, MCP, plugins, libraries, CLIs, and reference OSS remain distinct.
 - **Supply-chain controls.** Pinning, hashes, provenance, install-hook inspection, least privilege, approval gates, and rollback receipts.
-- **Architecture freeze.** Research re-entry is exceptional and capped.
+- **Architecture freeze.** Research re-entry is exceptional and capped; mandatory work discovered late must enter through the bounded `REPLAN` lane.
 - **Authenticated live authority.** A bounded job has one RUNNING owner, and both live `run.json` authority and the canonical task graph are protected by a user-local HMAC so repository content cannot forge phase/completion state; nested workspaces do not silently inherit an ancestor repository, and allowed repository bootstrap is recorded as lineage migration.
-- **Live activity budgets.** Observable Codex work consumes Core-owned counters instead of leaving a decorative zero-use ledger.
+- **Live activity budgets.** Observable Codex work consumes Core-owned counters instead of leaving a decorative zero-use ledger; hosts with measured monotonic counters can synchronize them idempotently.
+- **Introspection without solution steering.** `stackmarshal next` reports current state, blockers, legal transitions, and missing completion evidence without choosing a recovery command.
 - **Canonical task graph.** HMAC-authenticated machine-readable task status and evidence are synchronized into a generated Markdown view and gate `COMPLETE`.
 - **Finite stop harness.** Budgets, repeated-failure fingerprints, stagnation detection, scope-drift limits, and formal terminal states.
 - **Checkpoint/resume.** The same user-local HMAC integrity boundary protects checkpoints and acquisition receipts; `stackmarshal resume <run-id>` reopens only explicitly resumable stops after validating project identity, Git state, exact worktree fingerprint, and the signed resume phase.
@@ -216,7 +218,7 @@ stackmarshal version
 Pin an exact release when reproducibility matters:
 
 ```bash
-stackmarshal pin 1.2.1
+stackmarshal pin 1.2.2
 ```
 
 `stackmarshal version` is the human check: it reports the running CLI, exact managed pin,
@@ -240,7 +242,7 @@ after restart before work can begin.
 For a Skill-only manual installation, use the matching release tag:
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.1/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.2/skills/stackmarshal
 ```
 
 ## Quick CLI tour
@@ -255,12 +257,15 @@ stackmarshal migrate --dry-run
 stackmarshal invocation "Use StackMarshal to build this"
 stackmarshal start --mode build --budget standard \
   --invocation "Use StackMarshal to build this"
-stackmarshal doctor --host-skill-version 1.2.1
+stackmarshal doctor --host-skill-version 1.2.2
 stackmarshal state show
+stackmarshal next
 stackmarshal state transition INTENT_NORMALIZATION
 stackmarshal budget check
 stackmarshal activity record tool-call --amount 2 --detail "bounded host-tool batch"
+stackmarshal activity sync-host --source host-session --tool-calls-total 12
 stackmarshal task add implement --summary "Implement the feature" --acceptance "tests pass"
+stackmarshal task add late-fix --summary "New mandatory work" --acceptance "covered" --replan
 stackmarshal task start implement
 stackmarshal task complete implement --evidence "tests/test_feature.py passed"
 stackmarshal state transition CORRECTION
@@ -446,7 +451,7 @@ behavior is a v1 release requirement.
 `python scripts/build_release.py` resolves the current version from `pyproject.toml` and produces:
 
 - `install.ps1`, `install.sh`, and the shared verified `installer.py`
-- `stackmarshal-skill-v1.2.1.zip`
+- `stackmarshal-skill-v1.2.2.zip`
 - Python wheel and source distribution
 - source archive
 - `SHA256SUMS`

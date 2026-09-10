@@ -556,6 +556,11 @@ def test_dependency_free_skill_fallback_commands(tmp_path: Path) -> None:
     )
     assert invocation.returncode == 0
     assert json.loads(invocation.stdout)["mode"] == "build"
+    short_japanese = _run_script(
+        "stackmarshal_core.py", "invocation", "StackMarshalで次のvを作ろう", env=env
+    )
+    assert short_japanese.returncode == 0
+    assert json.loads(short_japanese.stdout) == {"triggered": True, "mode": "build"}
 
     candidate = tmp_path / "candidate.json"
     candidate.write_text(

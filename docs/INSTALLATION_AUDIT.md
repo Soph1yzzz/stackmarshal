@@ -168,6 +168,10 @@ ChromeBridge dogfood showed that the managed Windows installation could be healt
 
 v1.2.1 keeps `stackmarshal.cmd` as the authoritative Windows launcher and adds an extensionless POSIX-shell shim beside it in the same managed `bin` directory. The shim resolves its own directory and executes the same versioned managed venv directly; it does not search PATH for another Python or StackMarshal installation. Doctor groups co-located managed `.cmd` and extensionless shims into one launcher family so the compatibility alias does not create a false multiple-launcher warning. Installer tests assert the exact versioned interpreter target and launcher-family behavior; release acceptance additionally requires real Git Bash invocation after the managed v1.2.0 -> v1.2.1 update.
 
+## v1.2.2 readiness split
+
+`doctor` now reports Core readiness separately from Codex integration readiness. A pending Codex Skill reload no longer makes an otherwise healthy Core look repair-broken. Passing `--host-skill-version` still requires the installed Skill, loaded host version, and restart state to agree.
+
 ## Residual limitations
 
 - The one-time first bootstrap script is trusted through HTTPS delivery from the GitHub Release.

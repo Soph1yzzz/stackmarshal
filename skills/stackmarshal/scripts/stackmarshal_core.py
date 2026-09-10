@@ -113,7 +113,12 @@ def invocation(text: str) -> dict[str, Any]:
         "with stackmarshal", "使用 stackmarshal", "用 stackmarshal", "stackmarshal로",
         "utilise stackmarshal", "utilize stackmarshal", "$stackmarshal",
     )
-    triggered = exact and not anti and any(item in normalized for item in markers)
+    japanese_method_request = re.search(
+        r"stackmarshalで.{0,24}(実装|作|開発|調べ|準備|続|修正|直)", normalized
+    )
+    triggered = exact and not anti and (
+        any(item in normalized for item in markers) or japanese_method_request is not None
+    )
     mode = None
     if triggered:
         if any(item in normalized for item in ("resume", "続きから", "再開")):
