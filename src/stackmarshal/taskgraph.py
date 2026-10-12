@@ -96,6 +96,28 @@ def add_task(
     return task
 
 
+def amend_task(root: Path, task_id: str, *, summary: str, acceptance: list[str], reason: str) -> dict[str, Any]:
+    """Change a decision without laundering evidence from the superseded criteria."""
+
+    if not summary.strip() or not acceptance or not all(item.strip() for item in acceptance) or not reason.strip():
+        raise ValueError("Task amendment requires summary, nonempty acceptance, and reason")
+    graph = load_task_graph(root, required=True)
+    task = _find_task(graph, task_id)
+    history = task.setdefault("amendments", [])
+    if not isinstance(history, list):
+        raise ValueError("Invalid task amendment history")
+    history.append({
+        "reason": reason,
+        "previous_summary": task["summary"],
+        "previous_acceptance": list(task.get("acceptance", [])),
+        "previous_status": task["status"],
+        "previous_evidence": list(task.get("evidence", [])),
+    })
+    task.update(summary=summary, acceptance=list(acceptance), status="pending", evidence=[])
+    save_task_graph(root, graph)
+    return task
+
+
 def _find_task(graph: dict[str, Any], task_id: str) -> dict[str, Any]:
     for task in graph["tasks"]:
         if isinstance(task, dict) and task.get("id") == task_id:

@@ -59,7 +59,8 @@ def now_iso() -> str:
 def _run_git(root: Path, *args: str) -> str | None:
     try:
         result = subprocess.run(
-            ["git", *args], cwd=root, check=True, capture_output=True, text=True, timeout=10
+            ["git", *args], cwd=root, check=True, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -191,7 +192,7 @@ def terminal_repository_snapshot(root: Path) -> dict[str, Any]:
     """Capture final repository/workspace evidence immediately before COMPLETE."""
     head = _run_git(root, "rev-parse", "HEAD")
     toplevel = _run_git(root, "rev-parse", "--show-toplevel")
-    status = _run_git(root, "status", "--porcelain")
+    status = _run_git(root, "-c", "core.quotepath=false", "status", "--porcelain")
     entries = [] if status is None or not status else status.splitlines()
     dirty_paths: list[str] = []
     for entry in entries:
@@ -378,7 +379,7 @@ def create_run(root: Path, invocation: str, mode: Mode, config: Config) -> RunSt
         invocation=Invocation(explicit=True, raw_text=invocation),
         mode=mode,
         budget=BudgetState(config.budget_profile, dict(config.limits), {}),
-        progress={"live_contract_version": 1},
+        progress={"live_contract_version": 1, "workflow_profile": "build"},
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -387,13 +388,17 @@ def create_run(root: Path, invocation: str, mode: Mode, config: Config) -> RunSt
 def legal_transitions(state: RunState) -> list[Phase]:
     if state.status is not Status.RUNNING:
         return []
-    return sorted(_ALLOWED_TRANSITIONS[state.phase], key=lambda item: item.value)
+    allowed = set(_ALLOWED_TRANSITIONS[state.phase])
+    if (state.progress.get("workflow_profile") == "quick-explore"
+            and state.mode is Mode.BUILD and state.phase is Phase.ENVIRONMENT_AUDIT):
+        allowed.add(Phase.IMPLEMENTATION)
+    return sorted(allowed, key=lambda item: item.value)
 
 
 def transition(state: RunState, target: Phase) -> RunState:
     if state.status is not Status.RUNNING:
         raise ValueError(f"Cannot transition terminal run: {state.status}")
-    allowed = _ALLOWED_TRANSITIONS[state.phase]
+    allowed = set(legal_transitions(state))
     if target not in allowed:
         raise ValueError(f"Invalid transition: {state.phase} -> {target}")
     if state.phase.value not in state.completed_phases:

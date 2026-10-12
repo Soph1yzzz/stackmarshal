@@ -18,7 +18,22 @@
           "acceptance": {"type": "array", "items": {"type": "string"}},
           "status": {"enum": ["pending", "in_progress", "done", "blocked"]},
           "attempts": {"type": "integer", "minimum": 0},
-          "evidence": {"type": "array", "items": {"type": "string"}}
+          "evidence": {"type": "array", "items": {"type": "string"}},
+          "amendments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["reason", "previous_summary", "previous_acceptance", "previous_status", "previous_evidence"],
+              "properties": {
+                "reason": {"type": "string", "minLength": 1},
+                "previous_summary": {"type": "string"},
+                "previous_acceptance": {"type": "array", "items": {"type": "string"}},
+                "previous_status": {"enum": ["pending", "in_progress", "done", "blocked"]},
+                "previous_evidence": {"type": "array", "items": {"type": "string"}}
+              },
+              "additionalProperties": false
+            }
+          }
         },
         "additionalProperties": false
       }

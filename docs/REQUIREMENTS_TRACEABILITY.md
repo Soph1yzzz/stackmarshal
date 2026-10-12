@@ -22,3 +22,13 @@
 
 `COMPLETE` is permitted only when every mandatory row has passing evidence and the
 release checklist contains no unresolved blocker.
+
+## v1.2.3 additions
+
+| Area | Contract | Implementation | Evidence |
+|---|---|---|---|
+| Early Git | No silent ancestor capture, Git init without automatic staging/commit, Unicode-safe status | `git_bootstrap.py`, `state.py`, CLI `git` | `tests/test_v123_adaptive.py` |
+| Adaptive exploration | Quick local phase shortcut and explicitly reasoned soft research thresholds; hard budgets and completion unchanged | `state.py`, `activity.py`, `cli.py` | `tests/test_v123_adaptive.py` |
+| Task revision | REPLAN-only amendment keeps historical evidence but resets completion | `taskgraph.py`, CLI `task amend` | `tests/test_v123_adaptive.py` |
+| Evidence | Signed checkpoint/run comparison is read-only; external changes never become completion by implication | `reconciliation.py`, CLI `evidence reconcile` | `tests/test_v123_adaptive.py` |
+| Release audit | Completion checks file hash-bound tests, security, and artifact evidence | CLI `release-evidence` and completion gate | `tests/test_v123_adaptive.py` |

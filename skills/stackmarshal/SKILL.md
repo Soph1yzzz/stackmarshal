@@ -8,7 +8,7 @@ description: >
   "使用 StackMarshal 实现", or "$stackmarshal". Do not use for ordinary coding
   requests, explanations, comparisons, or text edits that merely mention the name.
 metadata:
-  version: "1.2.2"
+  version: "1.2.3"
 ---
 
 # StackMarshal
@@ -20,7 +20,7 @@ convergence: either `COMPLETE` with evidence or a formal, resumable stop.
 
 Before any work, verify host readiness and invocation in this order:
 
-1. Run `python scripts/stackmarshal_core.py host-ready --version "1.2.2"`.
+1. Run `python scripts/stackmarshal_core.py host-ready --version "1.2.3"`.
    The installer leaves a restart-pending marker outside the Skill directory. Only a
    matching newly loaded Skill may acknowledge and clear it. If this command reports
    `ready: false`, stop with `INVALID_STATE` and require a Codex restart.
@@ -31,7 +31,7 @@ Before any work, verify host readiness and invocation in this order:
    is not triggered, stop this skill and answer normally. A stale pre-restart Skill
    still invokes the replaced on-disk fallback; while the marker exists, that fallback
    refuses invocation with `restart_required` instead of silently emulating the new Skill.
-4. Run `stackmarshal doctor --host-skill-version "1.2.2"` before project work. A Skill,
+4. Run `stackmarshal doctor --host-skill-version "1.2.3"` before project work. A Skill,
    CLI, or host-version mismatch is `INVALID_STATE`.
 
 Never infer invocation from an ordinary coding request. Never invoke StackMarshal recursively.
@@ -86,11 +86,17 @@ that those writes form an atomic filesystem transaction.
 
 The direct and host paths share the same Core state machine, HMAC authority, budgets,
 acceptance gates, checkpoint rules, and finalization semantics; only the write transport
-differs. `migrate` is not host-write plannable in v1.2.2, and managed-install `pin` / `repair`
+differs. `migrate` is not host-write plannable in v1.2.3, and managed-install `pin` / `repair`
 remain outside the project HostWriteAdapter. For an intentional workspace move, create a
 signed permit with `stackmarshal relocate prepare --to <new-root>` before moving, then use
 `relocate accept` at the destination (with `--write-mode host` on shell-write-restricted hosts).
 Relocation and repository bootstrap are recorded as distinct identity migrations.
+
+For build work, inspect Git ownership before starting a run with `stackmarshal git inspect`.
+If the requested workspace is not a repository, use `stackmarshal git bootstrap` first.
+Never stage or commit existing files automatically. An ancestor repository needs explicit
+approval before creating a nested repository. In hosts forbidding shell-side project
+mutation, use an authorized native Git API or stop; do not run shell `git init`.
 
 Run `stackmarshal init`, then create exactly one authoritative
 run with `stackmarshal start`. Reuse that run ID until it reaches a terminal state;
@@ -98,6 +104,12 @@ never create a replacement run merely because Git is initialized or the workspac
 identity gains repository lineage. StackMarshal deliberately ignores an ancestor
 Git repository as ownership of a nested requested workspace and records allowed
 child-repository bootstrap/first-commit identity migrations in the same run.
+
+Choose a workflow profile separately from the final goal. `quick-explore` permits a
+short `ENVIRONMENT_AUDIT -> IMPLEMENTATION` path for safe local experiments; `build`
+preserves the normal research and task gates; `release-audit` requires hash-bound
+tests, security, and artifact evidence before completion. An experiment is not
+release acceptance. All profiles retain approval, integrity, and verification gates.
 
 Record requirements, mandatory acceptance criteria, constraints, non-goals,
 unresolved assumptions, risk class, budget profile, and event log. Enter every phase
@@ -159,7 +171,10 @@ verification command using `stackmarshal task add`. The canonical task state is
 view. If mandatory work is discovered after `TASK_GRAPH`, enter `REPLAN` and admit it
 with `stackmarshal task add --replan`; this consumes the bounded replan and scope-addition
 budgets instead of weakening the normal task-add phase rule. Research mode ends after
-the architecture report. Prepare mode ends after the task graph.
+the architecture report. Prepare mode ends after the task graph. New observations
+may justify `task amend` from REPLAN; this preserves old acceptance/evidence as
+history but resets task completion. Quick-explore may add an acceptance-bound
+experiment task directly during IMPLEMENTATION.
 
 ## 8. Build and verify
 
@@ -172,6 +187,8 @@ total, synchronize it with `stackmarshal activity sync-host --source <id> --tool
 otherwise reserve bounded host work explicitly with `stackmarshal activity record tool-call --amount <N>`.
 Record research rounds, replans, repeated failures, and stagnation cycles through the same activity
 ledger. Record at least one live `implementation` activity while still in `IMPLEMENTATION`.
+In quick-explore, research-round and architecture-replan thresholds are soft only
+when exceeded with a recorded `--reason`. Tool calls and safety limits stay hard.
 
 Each cycle must improve at least one observable measure: accepted criteria, passing
 tests, fewer unfinished tasks/blockers, lower uncertainty, a concrete root cause, or
@@ -197,6 +214,11 @@ changed deliverables/bookkeeping and records the final Git HEAD, dirty paths, st
 porcelain, and workspace fingerprint without mutating project content. After StackMarshal
 returns a terminal result, do not mutate project files or create Git commits unless the
 user explicitly requests a separate post-run action.
+
+Release-audit requires `stackmarshal release-evidence record` with existing test,
+security, and artifact files; their hashes are checked again at completion.
+`stackmarshal evidence reconcile` compares the signed run to outside Git changes
+without treating external work as verified completion.
 
 ## 9. Stop harness
 

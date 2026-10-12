@@ -225,7 +225,17 @@ The changed boundaries are narrow: read-only introspection, late-task admission,
 
 Security evidence: focused source review, adversarial regression, full automated quality gates, CI, and CodeQL.
 
+## v1.2.3 adaptive exploration boundary
+
+Focused review covers early Git bootstrap, conditional phase transitions, soft research thresholds,
+amended task evidence, signed checkpoint reconciliation, and release-evidence file containment.
+No workflow profile bypasses approval, postimage checks, terminal seals, or hard tool limits.
+Outside Git changes remain unverified; task amendments invalidate superseded acceptance evidence.
+Adversarial regression includes nested Git and traversal refusal, hard budget exhaustion,
+checkpoint drift, and release-evidence tampering.
+
 ## Scope limitation
+
 
 The application threat model excludes kernel compromise and malware already executing as the
 same operating-system user. StackMarshal is not an OS sandbox; operators must still use

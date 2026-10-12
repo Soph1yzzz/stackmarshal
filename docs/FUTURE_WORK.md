@@ -1,6 +1,6 @@
 # Future Work
 
-Items intentionally outside the v1.2.2 introspection/adaptive-harness scope:
+Items intentionally outside the v1.2.3 adaptive exploration/evidence scope:
 
 - Claude Code, Gemini CLI, Cline, GitHub Copilot, and OpenHands adapters.
 - Multi-agent research/build/review orchestration.
@@ -50,14 +50,19 @@ The next intended sequencing is:
   - admit mandatory work discovered after the frozen task graph only through bounded `REPLAN`,
   - accept monotonic host-observed tool-call totals without double-counting replayed telemetry,
   - separate Core readiness from Codex Skill/session readiness while keeping explicit integration checks strict.
-- **v1.2.3 — Operator UX / fully non-invasive operation**
+- **v1.2.3 — Adaptive exploration and evidence integrity**
+  - safe early Git bootstrap with ancestor-repository and unborn-HEAD diagnostics,
+  - workflow profiles for short experiments, normal builds, and audited releases,
+  - reasoned soft exploration limits without removing hard resource/safety caps,
+  - signed task-amendment history and read-only workspace evidence reconciliation.
+- **v1.2.4 — Operator UX / fully non-invasive operation**
   - repository-external/local initialization mode beyond the v1.1.5 existing-ignore optimization,
   - separate environment inventory from delivery-quality audit,
   - compact human CLI output with explicit full JSON mode,
   - make actionable shadowed-launcher cleanup guidance visible directly in doctor output.
-- **v1.2.4 — Claude Code adapter**
-- **v1.2.5 — Gemini CLI adapter**
-- **v1.2.6 — Adapter conformance polish**
+- **v1.2.5 — Claude Code adapter**
+- **v1.2.6 — Gemini CLI adapter**
+- **v1.2.7 — Adapter conformance polish**
 - **v1.3.0 — Multi-agent orchestration**
 - **v1.4.0 — Signed provenance**
 - **v2.0.0 — schema/migrations-class changes**

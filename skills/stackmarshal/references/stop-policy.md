@@ -5,6 +5,10 @@ repository clones 1, acquisition attempts per capability 2, research reentries 1
 architecture replans 2, task attempts 3, same failure repetitions 2, stagnation
 cycles 2, scope additions 5, tool calls 120, changed-files soft limit 80.
 
+Only in quick-explore, research-round and architecture-replan thresholds can be
+exceeded with a recorded reason. All other listed counters remain hard. A soft
+exceedance must stay visible in `budget check` and cannot certify acceptance.
+
 Every cycle must increase accepted criteria or passing tests, reduce unfinished work,
 blockers, or uncertainty, establish a root cause, or select a safe fallback. After
 two non-improving cycles, allow one replan; stop after another non-improving cycle.

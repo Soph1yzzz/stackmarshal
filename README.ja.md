@@ -115,7 +115,7 @@ installerは専用のvirtual environmentへCLIを入れ、同じversionのCodex 
 
 初回導入後の更新は`stackmarshal pin latest`で行えます。versionを固定したい場合はexact versionを指定できます。
 
-v1.1.5では同一runのresume、legacy stateの安全なarchive、verification後の小さな修正を扱う`CORRECTION` laneを追加しました。v1.2.0でHostWriteAdapterを導入し、v1.2.1ではpending transaction、payload量、workspace移動、Git Bashからの起動を詰めました。v1.2.2では`next`によるread-only introspection、late taskのbounded replan、host telemetry同期、Core/Codex readiness分離を追加しています。
+v1.1.5で同じrunの再開と検証後の修正に対応し、v1.2.0でHostWriteAdapterを導入しました。v1.2.1では書き込みの安全性と操作量を改善し、v1.2.2で`next`や後からのtask追加を実装。v1.2.3では探索を始めやすくし、Gitの初期化と作業証拠の照合を追加しています。
 
 ## StackMarshalが管理するもの
 
@@ -133,6 +133,8 @@ StackMarshalは、Codex向けのResearch First型orchestration Skillと、その
 - **live stateをrepositoryだけに任せない**：`run.json`とcanonical task graphはユーザー領域HMACで認証します。repository内のファイルを書き換えただけではphaseや`COMPLETE`を偽装できません。
 - **実際の作業量をbudgetへ記録する**：CodexがToolを使ったのに帳簿上は`used=0`という状態を避けます。Hostが単調増加する実測値を持つ場合は差分だけ同期できます。
 - **次に何が可能かを状態として返す**：`stackmarshal next`はblocker、legal transition、未完了task、completion条件を返しますが、復旧方法そのものは決めません。
+- **探索の邪魔をしない**：`quick-explore`なら実験に不要な工程を省略できます。ただし、検証や公開時の安全条件は緩めません。
+- **Gitを初手で確認する**：未初期化ならrepoを作れますが、既存ファイルの一括登録やcommitは行いません。
 - **taskの正本はmachine-readableに保つ**：task statusとevidenceをJSONで管理し、Markdownは人間向けviewとして生成します。
 - **止まり方を正式なstateにする**：budget exhaustion、同一failureの反復、stagnation、scope driftなどを検出してrunを有限に保ちます。
 - **checkpointから同じrunへ戻れる**：`stackmarshal resume <run-id>`は、checkpointのHMAC、project identity、Git state、worktree fingerprint、resume phaseを照合してから再開します。
@@ -205,7 +207,7 @@ CLIの必須runtime dependencyは0です。Skillを導入・更新した後はCo
 Skillだけを手動で入れる場合も、`main`ではなく対応するRelease tagへ固定してください。
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.2/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.3/skills/stackmarshal
 ```
 
 ## CLI例
@@ -216,11 +218,14 @@ stackmarshal version
 stackmarshal pin status
 stackmarshal repair --remove-shadowed
 stackmarshal init
+stackmarshal git inspect
+stackmarshal git bootstrap
 stackmarshal migrate --dry-run
 stackmarshal invocation "StackMarshalを使って実装して"
 stackmarshal start --mode build --budget standard \
   --invocation "StackMarshalを使って実装して"
-stackmarshal doctor --host-skill-version 1.2.2
+stackmarshal start --workflow quick-explore --invocation "$stackmarshal build"
+stackmarshal doctor --host-skill-version 1.2.3
 stackmarshal state show
 stackmarshal next
 stackmarshal state transition INTENT_NORMALIZATION
@@ -229,6 +234,9 @@ stackmarshal activity record tool-call --amount 2 --detail "bounded host-tool ba
 stackmarshal activity sync-host --source host-session --tool-calls-total 12
 stackmarshal task add implement --summary "機能を実装" --acceptance "tests pass"
 stackmarshal task add late-fix --summary "追加で必要になった作業" --acceptance "covered" --replan
+stackmarshal task amend implement --summary "別方式へ変更" --acceptance "新しい方法の実機検証" --reason "実測結果が変わった"
+stackmarshal evidence reconcile
+stackmarshal release-evidence record --tests build/tests.txt --security build/security.txt --artifacts build/manifest.json
 stackmarshal task start implement
 stackmarshal task complete implement --evidence "tests/test_feature.py passed"
 stackmarshal state transition CORRECTION

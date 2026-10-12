@@ -12,6 +12,19 @@ reasoning and implementation through an `AgentAdapter`; v1 provides a Codex envi
 adapter. Discovery, acquisition, and workspace mutation are protocol boundaries so future
 Agent adapters can reuse state and policy without changing the deterministic state machine.
 
+v1.2.3 separates the workflow profile from the run mode. `quick-explore` permits a
+short safe-experiment path without a full preliminary architecture/task graph, but
+still requires acceptance evidence and verification before `COMPLETE`. `build` keeps
+the previous workflow; `release-audit` additionally requires actual hashed test,
+security and artifact files. Only discovery/replan counters are soft in quick-explore,
+and exceeding them must carry an explicit reason. Resource and security bounds remain hard.
+
+Git ownership is inspected before new work. Bootstrap initializes only the requested
+workspace without an automatic commit; nested workspaces need explicit approval.
+`task amend` retains the superseded evidence as authenticated history but clears
+completion for changed criteria. `evidence reconcile` is read-only and never promotes
+work performed outside the recorded run into completion authority.
+
 Workspace mutation has two transports. `DirectFilesystemWriter` preserves the existing CLI-owned
 atomic write path for normal Codex/CLI operation. `HostPlanWorkspaceWriter` is used only when a host
 prohibits shell-side project mutation but provides a native file API. In that mode Core simulates the

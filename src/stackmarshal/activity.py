@@ -43,10 +43,13 @@ def record_activity(
     amount: int = 1,
     task_id: str | None = None,
     detail: str | None = None,
+    reason: str | None = None,
 ) -> dict[str, Any]:
     if amount <= 0:
         raise ValueError("Activity amount must be positive")
     allowed = _ALLOWED_PHASES.get(kind)
+    if kind == "research-round" and state.progress.get("workflow_profile") == "quick-explore":
+        allowed = {Phase.RESEARCH_GATE, Phase.LANDSCAPE_RESEARCH, Phase.IMPLEMENTATION}
     if allowed is not None and state.phase not in allowed:
         raise ValueError(f"Activity {kind!r} is not allowed during {state.phase.value}")
 
@@ -73,12 +76,29 @@ def record_activity(
     else:
         budget_counter = _COUNTER_BY_KIND.get(kind)
         if budget_counter:
-            decision = consume(state.budget, budget_counter, amount)
-            if not decision.allowed:
+            proposed = state.budget.used.get(budget_counter, 0) + amount
+            soft = (
+                state.progress.get("workflow_profile") == "quick-explore"
+                and budget_counter in {"research_rounds", "architecture_replans"}
+                and proposed > state.budget.limits[budget_counter]
+            )
+            if soft and not (reason and reason.strip()):
+                raise ValueError(f"Soft exploration limit requires a recorded reason: {budget_counter}")
+            if soft:
+                state.budget.used[budget_counter] = proposed
+                state.progress.setdefault("soft_limit_overrides", []).append(
+                    {"counter": budget_counter, "amount": amount, "reason": str(reason).strip(), "phase": state.phase.value}
+                )
+                used, limit_value = proposed, state.budget.limits[budget_counter]
+                decision = None
+            else:
+                decision = consume(state.budget, budget_counter, amount)
+            if decision is not None and not decision.allowed:
                 attempted = state.budget.used.get(budget_counter, 0) + amount
                 raise ActivityBudgetExhausted(budget_counter, attempted, decision.limit)
-            used = decision.used
-            limit_value = decision.limit
+            if decision is not None:
+                used = decision.used
+                limit_value = decision.limit
         else:
             used = None
             limit_value = None
@@ -103,6 +123,11 @@ def record_activity(
         "budget_counter": budget_counter,
         "budget_used": used,
         "budget_limit": limit_value,
+        "soft_exceeded": bool(
+            budget_counter and state.progress.get("workflow_profile") == "quick-explore"
+            and budget_counter in {"research_rounds", "architecture_replans"}
+            and isinstance(used, int) and isinstance(limit_value, int) and used > limit_value
+        ),
     }
     return record
 

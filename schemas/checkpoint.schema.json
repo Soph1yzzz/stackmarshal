@@ -21,6 +21,7 @@
     "timestamp": {"type": "string"},
     "project_identity": {"type": ["string", "null"]},
     "git_head": {"type": ["string", "null"]},
+    "git_state": {"enum": ["not_repository", "unborn_repository", "ready_repository"]},
     "dirty": {"type": "boolean"},
     "worktree_fingerprint": {
       "type": ["string", "null"],

@@ -21,6 +21,7 @@ from .checkpoint import create_checkpoint, inspect_checkpoint
 from .config import default_config, load_config
 from .constants import Mode, Phase, STATE_DIR, Status, __version__
 from .failure import fingerprint
+from .git_bootstrap import bootstrap_git, inspect_git
 from .hostwrite import (
     HostWriteError,
     abort_pending_plan,
@@ -36,6 +37,7 @@ from .migration import MigrationError, migrate_legacy_state
 from .models import ProgressSnapshot
 from .pinning import PinError, install_pin
 from .progress import evaluate
+from .reconciliation import reconcile_evidence
 from .relocation import (
     RelocationError,
     accept_relocation,
@@ -63,6 +65,7 @@ from .state import (
 )
 from .taskgraph import (
     add_task,
+    amend_task,
     block_task,
     complete_task,
     completion_errors as task_completion_errors,
@@ -346,6 +349,21 @@ def _finalization_errors(root: Path, state: Any) -> list[str]:
 def _completion_gate_errors(root: Path, state: Any, *, require_finalization: bool = True) -> list[str]:
     require_graph = state.mode is Mode.BUILD and int(state.progress.get("live_contract_version", 0)) >= 1
     errors: list[str] = []
+    if state.progress.get("workflow_profile") == "release-audit":
+        evidence = state.progress.get("release_evidence")
+        if not isinstance(evidence, dict) or set(evidence) != {"tests", "security", "artifacts"}:
+            errors.append("missing_release_audit_evidence")
+        else:
+            for kind, item in evidence.items():
+                if not isinstance(item, dict):
+                    errors.append(f"invalid_release_evidence:{kind}")
+                    continue
+                try:
+                    target = _release_evidence_file(root, str(item.get("path", "")))
+                    if _sha256_file(target) != item.get("sha256"):
+                        errors.append(f"release_evidence_changed:{kind}")
+                except (ValueError, OSError):
+                    errors.append(f"release_evidence_unavailable:{kind}")
     project_state_safe = True
     if require_graph:
         try:
@@ -441,6 +459,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     config = default_config(args.budget) if args.budget else load_config(_paths(root)["config"])
     mode = Mode(args.mode) if args.mode else infer_mode(args.invocation)
     state = create_run(root, args.invocation, mode, config)
+    state.progress["workflow_profile"] = args.workflow
     paths = _paths(root, state.run_id)
     save_state(state, paths["state"])
     append_event(paths["events"], "run_created", state.phase, {"mode": mode.value})
@@ -522,6 +541,7 @@ def cmd_next(args: argparse.Namespace) -> int:
             "run_id": state.run_id,
             "status": state.status.value,
             "phase": state.phase.value,
+            "workflow_profile": state.progress.get("workflow_profile", "build"),
             "resumable": state.status in RESUMABLE_STATUSES,
             "legal_transitions": [item.value for item in legal_transitions(state)],
             "blockers": blockers,
@@ -571,6 +591,20 @@ def cmd_state_transition(args: argparse.Namespace) -> int:
 def cmd_budget_check(args: argparse.Namespace) -> int:
     _, state = _find_state(_root(args.root), args.run_id)
     decisions = [asdict(item) for item in check_budget(state.budget)]
+    soft_counters = {"research_rounds", "architecture_replans"}
+    overrides = state.progress.get("soft_limit_overrides", [])
+    recorded = {
+        item.get("counter") for item in overrides if isinstance(item, dict) and item.get("reason")
+    } if isinstance(overrides, list) else set()
+    for item in decisions:
+        exceeded = not item["allowed"]
+        is_soft = (
+            state.progress.get("workflow_profile") == "quick-explore"
+            and item["counter"] in soft_counters and item["counter"] in recorded
+        )
+        item["soft_exceeded"] = exceeded and is_soft
+        if exceeded and is_soft:
+            item["allowed"] = True
     valid = all(item["allowed"] for item in decisions)
     _json({"valid": valid, "counters": decisions})
     return 0 if valid else EXIT_BUDGET
@@ -625,6 +659,7 @@ def cmd_activity_record(args: argparse.Namespace) -> int:
             amount=args.amount,
             task_id=args.task_id,
             detail=args.detail,
+            reason=args.reason,
         )
     except ActivityBudgetExhausted as exc:
         return _formal_budget_stop(root, path, state, exc)
@@ -716,7 +751,11 @@ def cmd_task_add(args: argparse.Namespace) -> int:
         except ActivityBudgetExhausted as exc:
             return _formal_budget_stop(root, path, state, exc)
     elif state.phase is not Phase.TASK_GRAPH:
-        raise ValueError("Tasks may be added only during TASK_GRAPH unless explicitly admitted from REPLAN")
+        if not (
+            state.progress.get("workflow_profile") == "quick-explore"
+            and state.phase is Phase.IMPLEMENTATION and args.acceptance
+        ):
+            raise ValueError("Tasks may be added only during TASK_GRAPH unless explicitly admitted from REPLAN")
     task = add_task(
         root,
         args.task_id,
@@ -733,6 +772,74 @@ def cmd_task_add(args: argparse.Namespace) -> int:
             {"task_id": args.task_id, "budget_records": replan_records},
         )
     _json({"added": True, "task": task, "replan": bool(replan_records)})
+    return 0
+
+
+def cmd_task_amend(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    path, state = _find_state(root, args.run_id)
+    if state.status is not Status.RUNNING or state.phase is not Phase.REPLAN:
+        raise ValueError("Task amendment requires an active REPLAN phase")
+    if not args.reason.strip() or not args.acceptance:
+        raise ValueError("Task amendment requires a reason and acceptance criteria")
+    # Validate before spending budget or touching the canonical graph.
+    graph = load_task_graph(root, required=True)
+    if not any(item.get("id") == args.task_id for item in graph["tasks"]):
+        raise ValueError(f"Unknown task: {args.task_id}")
+    try:
+        record = record_activity(state, "architecture-replan", detail=f"task amendment:{args.task_id}")
+    except ActivityBudgetExhausted as exc:
+        return _formal_budget_stop(root, path, state, exc)
+    task = amend_task(root, args.task_id, summary=args.summary, acceptance=args.acceptance, reason=args.reason)
+    save_state(state, path)
+    append_event(path.with_name("events.jsonl"), "task_amended", state.phase, {"task_id": args.task_id, "reason": args.reason, "budget": record})
+    _json({"amended": True, "task": task})
+    return 0
+
+
+def cmd_git_inspect(args: argparse.Namespace) -> int:
+    _json(inspect_git(_root(args.root)))
+    return 0
+
+
+def cmd_git_bootstrap(args: argparse.Namespace) -> int:
+    _json(bootstrap_git(_root(args.root), allow_nested=args.allow_nested))
+    return 0
+
+
+def cmd_evidence_reconcile(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    _, state = _find_state(root, args.run_id)
+    _json(reconcile_evidence(root, state))
+    return 0
+
+
+def _release_evidence_file(root: Path, name: str) -> Path:
+    relative = Path(name)
+    if not name or relative.is_absolute() or ".." in relative.parts:
+        raise ValueError("Release evidence must use a contained project-relative path")
+    target = root / relative
+    _assert_workspace_entry(root, target, expected="file")
+    if not target.is_file() or target.is_symlink():
+        raise ValueError("Release evidence must be an existing regular file")
+    return target
+
+
+def cmd_release_evidence(args: argparse.Namespace) -> int:
+    root = _root(args.root)
+    path, state = _find_state(root, args.run_id)
+    if state.progress.get("workflow_profile") != "release-audit":
+        raise ValueError("Release evidence recording requires release-audit workflow")
+    if state.status is not Status.RUNNING or state.phase is not Phase.VERIFICATION:
+        raise ValueError("Release evidence may be recorded only during active VERIFICATION")
+    recorded = {
+        kind: {"path": name, "sha256": _sha256_file(_release_evidence_file(root, name))}
+        for kind, name in (("tests", args.tests), ("security", args.security), ("artifacts", args.artifacts))
+    }
+    state.progress["release_evidence"] = recorded
+    save_state(state, path)
+    append_event(path.with_name("events.jsonl"), "release_evidence_recorded", state.phase, recorded)
+    _json({"recorded": True, "evidence": recorded})
     return 0
 
 
@@ -1575,12 +1682,12 @@ def cmd_host_write_recover(args: argparse.Namespace) -> int:
 
 
 def _host_plannable(args: argparse.Namespace) -> bool:
-    if args.command in {"init", "start", "activity", "stop", "report", "audit", "finalize"}:
+    if args.command in {"init", "start", "activity", "stop", "report", "audit", "finalize", "release-evidence"}:
         return True
     if args.command == "state":
         return bool(args.state_command == "transition")
     if args.command == "task":
-        return bool(args.task_command in {"add", "start", "complete", "block"})
+        return bool(args.task_command in {"add", "amend", "start", "complete", "block"})
     if args.command == "checkpoint":
         return bool(args.checkpoint_command == "create")
     if args.command == "resume":
@@ -1593,7 +1700,7 @@ def _host_plannable(args: argparse.Namespace) -> bool:
 def _project_mutating(args: argparse.Namespace) -> bool:
     if _host_plannable(args):
         return True
-    return bool(args.command == "migrate" and not args.dry_run)
+    return bool((args.command == "migrate" and not args.dry_run) or (args.command == "git" and args.git_command == "bootstrap"))
 
 
 def _run_host_planned_command(
@@ -1656,12 +1763,19 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init").set_defaults(func=cmd_init)
+    git = sub.add_parser("git")
+    git_sub = git.add_subparsers(dest="git_command", required=True)
+    git_sub.add_parser("inspect").set_defaults(func=cmd_git_inspect)
+    git_bootstrap = git_sub.add_parser("bootstrap")
+    git_bootstrap.add_argument("--allow-nested", action="store_true")
+    git_bootstrap.set_defaults(func=cmd_git_bootstrap)
     migrate = sub.add_parser("migrate")
     migrate.add_argument("--dry-run", action="store_true")
     migrate.set_defaults(func=cmd_migrate)
     start = sub.add_parser("start")
     start.add_argument("--mode", choices=[item.value for item in Mode])
     start.add_argument("--budget", choices=["quick", "standard", "deep"])
+    start.add_argument("--workflow", choices=["quick-explore", "build", "release-audit"], default="build")
     start.add_argument("--invocation", required=True)
     start.set_defaults(func=cmd_start)
 
@@ -1678,6 +1792,19 @@ def build_parser() -> argparse.ArgumentParser:
     next_parser = sub.add_parser("next")
     next_parser.add_argument("--run-id")
     next_parser.set_defaults(func=cmd_next)
+    evidence = sub.add_parser("evidence")
+    evidence_sub = evidence.add_subparsers(dest="evidence_command", required=True)
+    reconcile = evidence_sub.add_parser("reconcile")
+    reconcile.add_argument("--run-id")
+    reconcile.set_defaults(func=cmd_evidence_reconcile)
+    release_evidence = sub.add_parser("release-evidence")
+    release_evidence_sub = release_evidence.add_subparsers(dest="release_evidence_command", required=True)
+    release_record = release_evidence_sub.add_parser("record")
+    release_record.add_argument("--run-id")
+    release_record.add_argument("--tests", required=True)
+    release_record.add_argument("--security", required=True)
+    release_record.add_argument("--artifacts", required=True)
+    release_record.set_defaults(func=cmd_release_evidence)
 
     budget = sub.add_parser("budget")
     budget_sub = budget.add_subparsers(dest="budget_command", required=True)
@@ -1706,6 +1833,7 @@ def build_parser() -> argparse.ArgumentParser:
     activity_record.add_argument("--amount", type=int, default=1)
     activity_record.add_argument("--task-id")
     activity_record.add_argument("--detail")
+    activity_record.add_argument("--reason", help="reason for a bounded soft exploration limit override")
     activity_record.set_defaults(func=cmd_activity_record)
     activity_sync = activity_sub.add_parser("sync-host")
     activity_sync.add_argument("--run-id")
@@ -1723,6 +1851,13 @@ def build_parser() -> argparse.ArgumentParser:
     task_add.add_argument("--optional", action="store_true")
     task_add.add_argument("--replan", action="store_true", help="admit a late task only from REPLAN and consume bounded replan/scope budget")
     task_add.set_defaults(func=cmd_task_add)
+    task_amend = task_sub.add_parser("amend")
+    task_amend.add_argument("task_id")
+    task_amend.add_argument("--run-id")
+    task_amend.add_argument("--summary", required=True)
+    task_amend.add_argument("--acceptance", action="append", required=True)
+    task_amend.add_argument("--reason", required=True)
+    task_amend.set_defaults(func=cmd_task_amend)
     task_start = task_sub.add_parser("start")
     task_start.add_argument("task_id")
     task_start.add_argument("--run-id")
@@ -1881,6 +2016,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command != "host-write" and _project_mutating(args):
             require_no_pending_plan(_root(args.root))
         if args.write_mode == "host":
+            if args.command == "git" and args.git_command == "bootstrap":
+                raise HostWriteError("Git bootstrap needs host-native Git support; shell Git mutation is not allowed in host-write mode")
             if args.command == "migrate" and not args.dry_run:
                 raise HostWriteError(
                     "Legacy migration is not host-write plannable yet; use direct mode or archive legacy state before entering a shell-write-restricted host."

@@ -40,6 +40,10 @@ def create_checkpoint(
     do_not_repeat_items = do_not_repeat or []
     project_root = Path(state.project.root)
     current_project = project_info(project_root)
+    git_state = (
+        "not_repository" if not current_project.repository_owned else
+        "unborn_repository" if current_project.git_head is None else "ready_repository"
+    )
     ensure_signing_key_outside(project_root)
     metadata = sign_record(
         {
@@ -48,6 +52,7 @@ def create_checkpoint(
             "timestamp": datetime.now(UTC).isoformat(),
             "project_identity": current_project.identity_hash,
             "git_head": current_project.git_head,
+            "git_state": git_state,
             "dirty": current_project.dirty,
             "worktree_fingerprint": worktree_fingerprint(project_root),
             "mode": state.mode.value,
@@ -77,7 +82,7 @@ def create_checkpoint(
 - Run: `{state.run_id}`
 - Status: `{state.status.value}`
 - Project: `{state.project.root}`
-- Git HEAD: `{current_project.git_head or 'none'}`
+- Git: `{git_state}` (HEAD: `{current_project.git_head or 'none'}`)
 - Mode: `{state.mode.value}`
 - Current phase: `{state.phase.value}`
 - Integrity: `{INTEGRITY_ALGORITHM}` / key `{metadata['integrity_key_id']}`

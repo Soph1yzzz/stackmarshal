@@ -2,6 +2,30 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
+## [1.2.3] - Unreleased
+
+### Added
+
+- Add early Git ownership inspection and safe repository bootstrap without automatic staging or commits.
+- Add `quick-explore`, `build`, and `release-audit` workflow profiles independent of task mode.
+- Add reason-bound soft research/replan thresholds for quick exploration; hard safety and resource caps remain enforced.
+- Add signed task-amendment history and read-only `evidence reconcile` against Git/checkpoint state.
+- Bind release-audit completion to actual test, security and artifact evidence file hashes.
+
+### Fixed
+
+- Make Git path diagnostics Unicode-safe and distinguish unborn repositories from uninitialized workspaces.
+
+
+## [1.2.2] - 2026-09-10
+
+### Added
+
+- Add read-only `stackmarshal next` introspection for legal transitions, blockers and completion conditions.
+- Permit late mandatory tasks only through bounded REPLAN admission.
+- Add monotonic host telemetry sync and split Core readiness from Codex Skill readiness.
+- Improve short Japanese mechanism-invocation parity between Core and Skill fallback.
+
 ## [1.2.1] - 2026-09-09
 
 ### Added

@@ -2,7 +2,16 @@
 
 Use the deterministic state order defined by StackMarshal Core:
 
+Before a new build run, inspect Git ownership and bootstrap an uninitialized requested
+workspace without staging or committing user files. An ancestor repository is not
+assumed to own a nested workspace.
+
 `INVOCATION_CHECK -> INTENT_NORMALIZATION -> ENVIRONMENT_AUDIT -> RESEARCH_GATE -> LANDSCAPE_RESEARCH? -> CAPABILITY_MAPPING -> CAPABILITY_DISCOVERY -> TRUST_EVALUATION -> ISOLATED_POC? -> ARCHITECTURE_FREEZE -> TASK_GRAPH -> IMPLEMENTATION? -> VERIFICATION? -> (CORRECTION -> VERIFICATION)* -> COMPLETE|CHECKPOINTING`.
+
+`quick-explore` may instead take `ENVIRONMENT_AUDIT -> IMPLEMENTATION -> VERIFICATION`
+for safe local experiments; before claiming COMPLETE it must add acceptance-bound
+experiment tasks and satisfy the same verification/finalization gate. `release-audit`
+requires additional hash-bound test, security and artifact evidence.
 
 Research mode exits after architecture freeze. Prepare mode exits after task graph.
 Build mode continues through implementation and verification. Verification-discovered fixes that
