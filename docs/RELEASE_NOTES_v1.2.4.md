@@ -1,7 +1,8 @@
-# StackMarshal v1.2.4 — Invocation and continuation correctness (candidate)
+# StackMarshal v1.2.4 — Invocation and continuation correctness
 
-Status: **unreleased**. The source and test evidence below describe the local
-candidate; they are not a GitHub Release, installed upgrade, or published tag.
+These source-bundled notes describe the v1.2.4 changes and local validation.
+Published Release assets and CI/CodeQL results are verified separately in the
+release evidence.
 
 ## Problem
 
