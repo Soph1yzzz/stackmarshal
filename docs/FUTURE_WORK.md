@@ -55,14 +55,18 @@ The next intended sequencing is:
   - workflow profiles for short experiments, normal builds, and audited releases,
   - reasoned soft exploration limits without removing hard resource/safety caps,
   - signed task-amendment history and read-only workspace evidence reconciliation.
-- **v1.2.4 — Operator UX / fully non-invasive operation**
+- **v1.2.4 — Invocation/continuation correctness hotfix**
+  - fix false negatives for explicit multilingual mechanism requests and explicit non-use cases,
+  - distinguish fresh invocation from same-task signed-run continuation admission,
+  - expose machine-readable refusal reasons without weakening HMAC, approval, or resume rules.
+- **v1.2.5 — Operator UX / fully non-invasive operation**
   - repository-external/local initialization mode beyond the v1.1.5 existing-ignore optimization,
   - separate environment inventory from delivery-quality audit,
   - compact human CLI output with explicit full JSON mode,
   - make actionable shadowed-launcher cleanup guidance visible directly in doctor output.
-- **v1.2.5 — Claude Code adapter**
-- **v1.2.6 — Gemini CLI adapter**
-- **v1.2.7 — Adapter conformance polish**
+- **v1.2.6 — Claude Code adapter**
+- **v1.2.7 — Gemini CLI adapter**
+- **v1.2.8 — Adapter conformance polish**
 - **v1.3.0 — Multi-agent orchestration**
 - **v1.4.0 — Signed provenance**
 - **v2.0.0 — schema/migrations-class changes**

@@ -58,7 +58,12 @@ def test_cli_init_start_show_audit_and_invocation(tmp_path: Path, capsys: pytest
     assert code == 0 and Path(str(audit["written"])).exists()
 
     code, invoked = _call(capsys, ["invocation", "StackMarshalで調べて"])
-    assert code == 0 and invoked == {"triggered": True, "mode": "research"}
+    assert code == 0 and invoked == {
+        "triggered": True,
+        "mode": "research",
+        "reason": "explicit_mechanism",
+        "continuation": "not_evaluated",
+    }
     code, invoked = _call(capsys, ["invocation", "StackMarshalとは？"])
     assert code == EXIT_INVALID_INPUT and invoked["triggered"] is False
 

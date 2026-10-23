@@ -5,10 +5,11 @@ description: >
   implementation, verification, checkpoint, and resume workflow for Codex.
   Use only when the user explicitly names StackMarshal as the mechanism to use,
   such as "StackMarshalを使って実装して", "Use StackMarshal to build this",
-  "使用 StackMarshal 实现", or "$stackmarshal". Do not use for ordinary coding
-  requests, explanations, comparisons, or text edits that merely mention the name.
+  "使用 StackMarshal 实现", or "$stackmarshal"; or to continue the same task
+  with an already-authorized, signed, running StackMarshal run ID. Do not use
+  for unrelated coding, comparisons, or text edits mentioning its name.
 metadata:
-  version: "1.2.3"
+  version: "1.2.4"
 ---
 
 # StackMarshal
@@ -20,19 +21,27 @@ convergence: either `COMPLETE` with evidence or a formal, resumable stop.
 
 Before any work, verify host readiness and invocation in this order:
 
-1. Run `python scripts/stackmarshal_core.py host-ready --version "1.2.3"`.
+1. Run `python scripts/stackmarshal_core.py host-ready --version "1.2.4"`.
    The installer leaves a restart-pending marker outside the Skill directory. Only a
    matching newly loaded Skill may acknowledge and clear it. If this command reports
    `ready: false`, stop with `INVALID_STATE` and require a Codex restart.
-2. Verify that the exact brand `StackMarshal` (case-insensitive) or `$stackmarshal`
-   is present and that the user identifies it as the mechanism to use, not merely a
-   topic or edit target.
-3. Run `python scripts/stackmarshal_core.py invocation "<user text>"`. When the result
-   is not triggered, stop this skill and answer normally. A stale pre-restart Skill
-   still invokes the replaced on-disk fallback; while the marker exists, that fallback
-   refuses invocation with `restart_required` instead of silently emulating the new Skill.
-4. Run `stackmarshal doctor --host-skill-version "1.2.3"` before project work. A Skill,
-   CLI, or host-version mismatch is `INVALID_STATE`.
+2. Run `stackmarshal doctor --host-skill-version "1.2.4"`. A Skill,
+   CLI, or host-version mismatch is `INVALID_STATE`; never admit a run with
+   an unverified host/CLI version.
+3. For **new work**, require the exact brand `StackMarshal` (case-insensitive)
+   or `$stackmarshal` and an explicit instruction to use it as the mechanism.
+   Run `python scripts/stackmarshal_core.py invocation "<user text>"`. If
+   `triggered: false`, do not start a run. `reason` distinguishes a mere mention,
+   explicit non-use, and an unrecognized mechanism request; clarify if needed.
+   A stale pre-restart Skill refuses invocation with `restart_required`.
+4. For **continuation only**, reuse a run ID already established for this same
+   task; run `stackmarshal --root <project> continuation "<user text>"
+   --run-id <existing-id>`. Proceed only with `continuation: admitted`. This
+   read-only gate verifies an HMAC-authenticated sole RUNNING run, its original
+   explicit invocation and project root. It does not authorize new scope,
+   bypass phase/approval gates, or resume a stopped run. If the run ID is unknown,
+   status is terminal, text changes scope, or verification fails, stop the Skill;
+   never manufacture a new signed run from "そのまま続けて" alone.
 
 Never infer invocation from an ordinary coding request. Never invoke StackMarshal recursively.
 

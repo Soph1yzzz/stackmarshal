@@ -2,7 +2,19 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
-## [1.2.3] - Unreleased
+## [1.2.4] - Unreleased
+
+### Fixed
+
+- Recognize explicit Japanese mechanism requests such as `StackMarshalを利用して開発して`, `StackMarshalで進めて`, and `StackMarshalに従って進めて` in Core and dependency-free Skill fallback.
+- Reject explicit non-use instructions, including non-use with `$stackmarshal`, without creating a signed run.
+
+### Added
+
+- Return machine-readable invocation reasons; add read-only `continuation` admission limited to one authenticated, explicitly invoked RUNNING run in the same project, while preserving signing and scope gates.
+- Add matching fallback/Core conformance tests and signed continuation regression coverage.
+
+## [1.2.3] - 2026-10-12
 
 ### Added
 

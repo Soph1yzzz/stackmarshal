@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import unicodedata
 import uuid
 from typing import Any
 
@@ -468,28 +469,75 @@ def append_event(path: Path, event_type: str, phase: Phase, payload: dict[str, A
     return event
 
 
-def validate_invocation(text: str) -> bool:
-    normalized = re.sub(r"\s+", " ", text.casefold()).strip()
-    if "$stackmarshal" in normalized:
-        return True
-    if "stackmarshal" not in normalized:
-        return False
-    anti_patterns = (
+def _invocation_text(text: str) -> str:
+    # Cited past instructions and code samples are evidence, not fresh authority.
+    text = re.sub(r"```[\s\S]*?```", " ", text)
+    text = re.sub(r"(?m)^\s*>.*$", " ", text)
+    text = re.sub(r"[「『][^」』]*[」』]", " ", text)
+    text = re.sub(r'"[^"\n]*"|“[^”]*”', " ", text)
+    text = re.sub(r"`[^`]*`", " ", text)
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text).casefold()).strip()
+
+
+def invocation_reason(text: str) -> str:
+    """Classify new invocation intent; continuation has a separate signed-run gate.
+
+    This bounded grammar is not a general natural-language parser. Unknown
+    wording fails closed. Keep the Skill fallback and conformance tests in sync.
+    """
+    normalized = _invocation_text(text)
+    if not re.search(r"(?<![a-z0-9_])\$?stackmarshal(?![a-z0-9_])", normalized):
+        return "brand_not_named"
+    denied = (
+        r"stackmarshal.{0,24}(使わない|使わず|使わなく|使うな|使ってはいけない|使ってはダメ|"
+        r"利用しない|使用しない|禁止|不要|以外|じゃなく|ではなく|抜きで|なしで)",
+        r"stackmarshal.{0,56}(?:実装しない|開発しない|進めない|続けない|作らない|修正しない|"
+        r"直さない|つもりはない|予定はない)",
+        r"(?:do\s+not|don't|never|without|avoid|instead\s+of|not\s+using)\b.{0,48}\$?stackmarshal",
+        r"stackmarshal\s+(?:is\s+)?(?:not\s+to\s+be\s+used|not\s+required|not\s+needed|disabled|prohibited)",
+        r"(?:不使用|不要用|不要使用|禁止使用)\s*stackmarshal",
+    )
+    if any(re.search(pattern, normalized) for pattern in denied):
+        return "explicit_non_use"
+    references = (
         r"stackmarshal\s*(とは|って何|について|に似た)",
         r"stackmarshal.{0,24}(readme|表記|名前).{0,16}(直|修正|編集)",
-        r"(what is|explain|compare).{0,24}stackmarshal",
+        r"(what is|explain|compare|how to).{0,32}stackmarshal",
+        r"stackmarshal.{0,24}(使い方|利用方法|使用方法)",
+        r"stackmarshal.{0,48}(という(?:入力|文言|指示|表現)|と(?:言われ|書かれ|指示|入力)|の判定|のバグ|の原因)",
     )
-    if any(re.search(pattern, normalized) for pattern in anti_patterns):
+    if any(re.search(pattern, normalized) for pattern in references):
+        return "reference_only"
+    if "$stackmarshal" in normalized:
+        return "explicit_mechanism"
+    methods = (
+        r"stackmarshal\s*(?:を\s*)?(?:使(?:って|い|う|おう)|利用(?:して|し|する)|"
+        r"使用(?:して|し|する)|活用(?:して|し|する)|用い(?:て|る))",
+        r"stackmarshal\s*(?:で|に従って|に基づいて|経由で).{0,48}"
+        r"(?:実装|開発|進め|続け|作|構築|調べ|準備|修正|直|検証|テスト|レビュー)",
+        r"\b(?:use|using|utilise|utilize|with|via|through)\s+stackmarshal\b",
+        r"(?:使用|用|通过)\s*stackmarshal\b",
+        r"stackmarshal(?:로|으로|을 사용)",
+    )
+    return "explicit_mechanism" if any(re.search(pattern, normalized) for pattern in methods) else "mention_only"
+
+
+def validate_invocation(text: str) -> bool:
+    return invocation_reason(text) == "explicit_mechanism"
+
+
+def is_continuation_request(text: str) -> bool:
+    """Admit only narrow same-task follow-ups, never fresh implicit invocations."""
+    normalized = _invocation_text(text).strip(" 。.!！?？")
+    if "stackmarshal" in normalized and invocation_reason(text) == "explicit_non_use":
         return False
-    use_markers = (
-        "を使", "で実装", "で作", "で調べ", "で準備", "で続", "use stackmarshal",
-        "with stackmarshal", "使用 stackmarshal", "用 stackmarshal", "stackmarshal로",
-        "utilise stackmarshal", "utilize stackmarshal",
-    )
-    japanese_method_request = re.search(
-        r"stackmarshalで.{0,24}(実装|作|開発|調べ|準備|続|修正|直)", normalized
-    )
-    return any(marker in normalized for marker in use_markers) or japanese_method_request is not None
+    return re.fullmatch(
+        r"(?:(?:時間制限まで|自律的に)\s*)*"
+        r"(?:(?:そのまま|引き続き|続きから|続きを|前の作業を|同じ作業を)\s*)?"
+        r"(?:進めて|続けて|続行して|再開して|進めてください|続けてください|続行してください|"
+        r"continue|keep going|go on|proceed(?: with the same task)?)",
+        normalized,
+    ) is not None
 
 
 def infer_mode(text: str) -> Mode:

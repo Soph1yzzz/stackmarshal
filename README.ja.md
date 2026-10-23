@@ -207,7 +207,7 @@ CLIの必須runtime dependencyは0です。Skillを導入・更新した後はCo
 Skillだけを手動で入れる場合も、`main`ではなく対応するRelease tagへ固定してください。
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.3/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.4/skills/stackmarshal
 ```
 
 ## CLI例
@@ -222,10 +222,12 @@ stackmarshal git inspect
 stackmarshal git bootstrap
 stackmarshal migrate --dry-run
 stackmarshal invocation "StackMarshalを使って実装して"
+# 同じ作業の署名付きRUNNING runを継続するときだけ。新規runは起動しません。
+stackmarshal continuation "そのまま進めて" --run-id RUN_ID
 stackmarshal start --mode build --budget standard \
   --invocation "StackMarshalを使って実装して"
 stackmarshal start --workflow quick-explore --invocation "$stackmarshal build"
-stackmarshal doctor --host-skill-version 1.2.3
+stackmarshal doctor --host-skill-version 1.2.4
 stackmarshal state show
 stackmarshal next
 stackmarshal state transition INTENT_NORMALIZATION

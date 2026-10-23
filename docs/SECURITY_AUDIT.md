@@ -234,6 +234,33 @@ Outside Git changes remain unverified; task amendments invalidate superseded acc
 Adversarial regression includes nested Git and traversal refusal, hard budget exhaustion,
 checkpoint drift, and release-evidence tampering.
 
+## v1.2.4 invocation/continuation admission review (candidate)
+
+The trust boundary changed only at admission, not at signed-run creation, phase
+transitions, approval enforcement, checkpoint resume, or finalization. Core and
+the dependency-free Skill fallback now reject explicit non-use, distinguish
+quoted examples/mentions from method instructions where the bounded grammar can
+identify them, and report an explicit machine-readable reason. Ambiguous intent
+remains fail-closed; regular expressions are not claimed to parse arbitrary
+natural language perfectly.
+
+The new `continuation` CLI is read-only. It requires a caller-supplied run ID,
+one HMAC-verified authoritative RUNNING run, an originally explicit invocation,
+and an identical workspace root. It does not turn `triggered` true, create a
+run, reopen stopped runs, approve a new task, or bypass independent command
+permissions. Tampering with the signed state fails authentication. Same-task
+conversation provenance is **not** cryptographically established by the CLI;
+the Skill must keep the prior authorized run ID tied to the live user task.
+Agents must never discover a stale run ID and treat that alone as authorization.
+
+Evidence: `tests/test_invocation_admission.py` covers Core/Skill parity,
+false-negative Japanese variants, non-use including `$stackmarshal`, quoted
+references, implicit bare follow-ups, signed active continuation, stopped runs,
+scope changes, wrong IDs, state immutability, and HMAC tampering. Existing
+security, CLI, and distribution tests remain in the full suite. Full Codex
+Security repository scan and public CodeQL are still pending for a release;
+no published v1.2.4 security assurance is claimed by this candidate.
+
 ## Scope limitation
 
 

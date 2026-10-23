@@ -18,6 +18,7 @@ from pathlib import Path
 import re
 import secrets
 import sys
+import unicodedata
 from typing import Any
 
 WEIGHTS = {
@@ -91,6 +92,50 @@ def host_ready(version: str) -> dict[str, Any]:
     }
 
 
+def invocation_reason(text: str) -> str:
+    """Dependency-free mirror of state.invocation_reason; parity is tested."""
+    text = re.sub(r"```[\s\S]*?```", " ", text)
+    text = re.sub(r"(?m)^\s*>.*$", " ", text)
+    text = re.sub(r"[「『][^」』]*[」』]", " ", text)
+    text = re.sub(r'"[^"\n]*"|“[^”]*”', " ", text)
+    text = re.sub(r"`[^`]*`", " ", text)
+    normalized = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text).casefold()).strip()
+    if not re.search(r"(?<![a-z0-9_])\$?stackmarshal(?![a-z0-9_])", normalized):
+        return "brand_not_named"
+    denied = (
+        r"stackmarshal.{0,24}(使わない|使わず|使わなく|使うな|使ってはいけない|使ってはダメ|"
+        r"利用しない|使用しない|禁止|不要|以外|じゃなく|ではなく|抜きで|なしで)",
+        r"stackmarshal.{0,56}(?:実装しない|開発しない|進めない|続けない|作らない|修正しない|"
+        r"直さない|つもりはない|予定はない)",
+        r"(?:do\s+not|don't|never|without|avoid|instead\s+of|not\s+using)\b.{0,48}\$?stackmarshal",
+        r"stackmarshal\s+(?:is\s+)?(?:not\s+to\s+be\s+used|not\s+required|not\s+needed|disabled|prohibited)",
+        r"(?:不使用|不要用|不要使用|禁止使用)\s*stackmarshal",
+    )
+    if any(re.search(pattern, normalized) for pattern in denied):
+        return "explicit_non_use"
+    references = (
+        r"stackmarshal\s*(とは|って何|について|に似た)",
+        r"stackmarshal.{0,24}(readme|表記|名前).{0,16}(直|修正|編集)",
+        r"(what is|explain|compare|how to).{0,32}stackmarshal",
+        r"stackmarshal.{0,24}(使い方|利用方法|使用方法)",
+        r"stackmarshal.{0,48}(という(?:入力|文言|指示|表現)|と(?:言われ|書かれ|指示|入力)|の判定|のバグ|の原因)",
+    )
+    if any(re.search(pattern, normalized) for pattern in references):
+        return "reference_only"
+    if "$stackmarshal" in normalized:
+        return "explicit_mechanism"
+    methods = (
+        r"stackmarshal\s*(?:を\s*)?(?:使(?:って|い|う|おう)|利用(?:して|し|する)|"
+        r"使用(?:して|し|する)|活用(?:して|し|する)|用い(?:て|る))",
+        r"stackmarshal\s*(?:で|に従って|に基づいて|経由で).{0,48}"
+        r"(?:実装|開発|進め|続け|作|構築|調べ|準備|修正|直|検証|テスト|レビュー)",
+        r"\b(?:use|using|utilise|utilize|with|via|through)\s+stackmarshal\b",
+        r"(?:使用|用|通过)\s*stackmarshal\b",
+        r"stackmarshal(?:로|으로|을 사용)",
+    )
+    return "explicit_mechanism" if any(re.search(pattern, normalized) for pattern in methods) else "mention_only"
+
+
 def invocation(text: str) -> dict[str, Any]:
     marker = read_restart_marker()
     if marker is not None:
@@ -101,24 +146,9 @@ def invocation(text: str) -> dict[str, Any]:
             "target_version": marker["version"],
             "reason": "codex_restart_required",
         }
-    normalized = re.sub(r"\s+", " ", text.casefold()).strip()
-    exact = "$stackmarshal" in normalized or "stackmarshal" in normalized
-    anti = any(re.search(pattern, normalized) for pattern in (
-        r"stackmarshal\s*(とは|って何|について|に似た)",
-        r"stackmarshal.{0,24}(readme|表記|名前).{0,16}(直|修正|編集)",
-        r"(what is|explain|compare).{0,24}stackmarshal",
-    ))
-    markers = (
-        "を使", "で実装", "で作", "で調べ", "で準備", "で続", "use stackmarshal",
-        "with stackmarshal", "使用 stackmarshal", "用 stackmarshal", "stackmarshal로",
-        "utilise stackmarshal", "utilize stackmarshal", "$stackmarshal",
-    )
-    japanese_method_request = re.search(
-        r"stackmarshalで.{0,24}(実装|作|開発|調べ|準備|続|修正|直)", normalized
-    )
-    triggered = exact and not anti and (
-        any(item in normalized for item in markers) or japanese_method_request is not None
-    )
+    reason = invocation_reason(text)
+    triggered = reason == "explicit_mechanism"
+    normalized = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text).casefold()).strip()
     mode = None
     if triggered:
         if any(item in normalized for item in ("resume", "続きから", "再開")):
@@ -131,7 +161,7 @@ def invocation(text: str) -> dict[str, Any]:
             mode = "research"
         else:
             mode = "build"
-    return {"triggered": triggered, "mode": mode}
+    return {"triggered": triggered, "mode": mode, "reason": reason, "continuation": "not_evaluated"}
 
 
 def normalize_message(text: str) -> str:

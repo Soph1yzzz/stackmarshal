@@ -50,6 +50,8 @@ from .state import (
     append_event,
     create_run,
     infer_mode,
+    invocation_reason,
+    is_continuation_request,
     legal_transitions,
     load_state,
     now_iso,
@@ -1595,9 +1597,38 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 
 def cmd_invocation(args: argparse.Namespace) -> int:
-    triggered = validate_invocation(args.text)
-    _json({"triggered": triggered, "mode": infer_mode(args.text).value if triggered else None})
+    reason = invocation_reason(args.text)
+    triggered = reason == "explicit_mechanism"
+    _json({
+        "triggered": triggered,
+        "mode": infer_mode(args.text).value if triggered else None,
+        "reason": reason,
+        "continuation": "not_evaluated",
+    })
     return 0 if triggered else EXIT_INVALID_INPUT
+
+
+def cmd_continuation(args: argparse.Namespace) -> int:
+    """Read-only admission of a follow-up to one verified, already-running task."""
+    root = _root(args.root)
+    active = _active_runs(root)  # load_state verifies the HMAC for every candidate.
+    if not is_continuation_request(args.text):
+        reason = "not_same_task_continuation_text"
+    elif len(active) != 1 or active[0][1].run_id != args.run_id:
+        reason = "no_matching_authoritative_running_run"
+    elif not active[0][1].invocation.explicit or active[0][1].root.resolve() != root:
+        reason = "run_scope_or_invocation_mismatch"
+    else:
+        _json({
+            "triggered": False,
+            "continuation": "admitted",
+            "reason": "verified_existing_run",
+            "run_id": args.run_id,
+            "mode": active[0][1].mode.value,
+        })
+        return 0
+    _json({"triggered": False, "continuation": "denied", "reason": reason, "mode": None})
+    return EXIT_INVALID_INPUT
 
 
 def cmd_relocate_prepare(args: argparse.Namespace) -> int:
@@ -1948,6 +1979,11 @@ def build_parser() -> argparse.ArgumentParser:
     invocation = sub.add_parser("invocation")
     invocation.add_argument("text")
     invocation.set_defaults(func=cmd_invocation)
+
+    continuation = sub.add_parser("continuation")
+    continuation.add_argument("text")
+    continuation.add_argument("--run-id", required=True, help="previously authorized signed run ID")
+    continuation.set_defaults(func=cmd_continuation)
 
     relocate = sub.add_parser("relocate")
     relocate_sub = relocate.add_subparsers(dest="relocate_command", required=True)

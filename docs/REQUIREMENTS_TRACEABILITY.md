@@ -2,7 +2,7 @@
 
 | Area | Requirement | Implementation | Evidence |
 |---|---|---|---|
-| Invocation | Explicit semantic invocation only; EN/JA/ZH and `$stackmarshal` | `state.validate_invocation`, Skill invocation gate | `tests/test_core.py`, fallback CLI tests |
+| Invocation | Bounded explicit mechanism grammar with non-use rejection, diagnostic reasons, EN/JA/ZH/KR and `$stackmarshal`; distinct signed-running-run continuation admission without implicit new runs | `state.invocation_reason`, `state.is_continuation_request`, CLI `invocation`/`continuation`, Skill fallback/gate | `tests/test_invocation_admission.py`, `tests/test_core.py`, fallback distribution tests |
 | Modes | research, prepare, build, resume | `Mode`, `infer_mode` | unit tests |
 | Environment | OS, Python, Git, dirty state, native Skills | `adapters/codex.py` | audit CLI and integration tests |
 | Research | Gate, staged bounded research, evidence compression | `research.py`, Skill policy | unit tests and docs |

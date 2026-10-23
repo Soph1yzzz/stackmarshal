@@ -246,7 +246,7 @@ after restart before work can begin.
 For a Skill-only manual installation, use the matching release tag:
 
 ```text
-$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.3/skills/stackmarshal
+$skill-installer install https://github.com/Soph1yzzz/stackmarshal/tree/v1.2.4/skills/stackmarshal
 ```
 
 ## Quick CLI tour
@@ -261,10 +261,12 @@ stackmarshal git inspect
 stackmarshal git bootstrap
 stackmarshal migrate --dry-run
 stackmarshal invocation "Use StackMarshal to build this"
+# After a signed run was started for the same task, a bare follow-up is not a new invocation:
+stackmarshal continuation "keep going" --run-id RUN_ID
 stackmarshal start --mode build --budget standard \
   --invocation "Use StackMarshal to build this"
 stackmarshal start --workflow quick-explore --invocation "$stackmarshal build a local experiment"
-stackmarshal doctor --host-skill-version 1.2.3
+stackmarshal doctor --host-skill-version 1.2.4
 stackmarshal state show
 stackmarshal next
 stackmarshal state transition INTENT_NORMALIZATION
@@ -462,7 +464,7 @@ behavior is a v1 release requirement.
 `python scripts/build_release.py` resolves the current version from `pyproject.toml` and produces:
 
 - `install.ps1`, `install.sh`, and the shared verified `installer.py`
-- `stackmarshal-skill-v1.2.3.zip`
+- `stackmarshal-skill-v1.2.4.zip`
 - Python wheel and source distribution
 - source archive
 - `SHA256SUMS`

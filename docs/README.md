@@ -26,6 +26,7 @@ Use [REQUIREMENTS_TRACEABILITY.md](REQUIREMENTS_TRACEABILITY.md) to map requirem
 
 - [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) — current release process and required gates.
 - [RELEASE_NOTES_v1.2.3.md](RELEASE_NOTES_v1.2.3.md) — adaptive exploration, Git bootstrap, task amendments, and read-only evidence reconciliation.
+- [RELEASE_NOTES_v1.2.4.md](RELEASE_NOTES_v1.2.4.md) — unreleased invocation/continuation admission correctness candidate.
 - [RELEASE_NOTES_v1.2.2.md](RELEASE_NOTES_v1.2.2.md) — v1.2.2 introspection, bounded late-task admission, host telemetry sync, and readiness separation.
 - [RELEASE_NOTES_v1.2.1.md](RELEASE_NOTES_v1.2.1.md) — v1.2.1 HostWrite transaction hardening, compact append/CAS, recovery, relocation, and Git Bash launcher support.
 - [RELEASE_NOTES_v1.2.0.md](RELEASE_NOTES_v1.2.0.md) — v1.2.0 host-write transport foundation for shell-write-restricted hosts, with signed plan/check/ack semantics.
